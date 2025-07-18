@@ -20,6 +20,8 @@
 #include "llvm/TargetParser/Host.h"
 #include "llvm/TargetParser/SubtargetFeature.h"
 #include "llvm/TargetParser/Triple.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
 #include <memory>
 #include <optional>
 #include <string>
@@ -64,8 +66,6 @@ Permissive("permissive", cl::Hidden,
   std::exit(1);
 }
 
-static void LLVMInitializeEverything();
-
 static void FixupFilename(std::string& InFilename) {
   SmallString<128> Filename{StringRef(InFilename)};
   if (auto EC = sys::fs::make_absolute(Filename))
@@ -81,6 +81,12 @@ static bool ParseCLArgs(int argc, char* const* argv) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+/// Initializes literally everything. Might be able to pull back a bit...
+static void LLVMInitializeEverything();
+
+/// Gets some basic passes we can run on functions.
+static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification();
 
 static int DebaseModules(ArrayRef<StringRef> Filenames,
                          ArrayRef<StringRef> Unlinks,
@@ -175,12 +181,12 @@ void UnlinkRefs::addSimpleUnlink(ArrayRef<StringRef> Names) {
   }
   for (StringRef Name : Names)
     OS << Name.size() << Name;
-  
+#if 0
   // [deleting destructor]
   OS << "D0Ev";
   SimpleUnlinks.insert(MangledName);
   MangledName.pop_back_n(4);
-
+#endif
   // [base object destructor]
   OS << "D2Ev";
   SimpleUnlinks.insert(MangledName);
@@ -250,6 +256,7 @@ class DeBaser {
   // Builtins...
   Function* BI__debase_mark_begin = nullptr;
   Function* BI__debase_mark_end = nullptr;
+  Function* BI__debase_continuation = nullptr;
 
   unsigned EncounteredSimples = 0;
 
@@ -297,7 +304,26 @@ public:
     }
   }
 
-  
+  /// Runs a set of passes on our collected functions.
+  /// @return `true` if the function was modified.
+  void runPasses(const std::vector<FunctionPass*>& Passes, StringRef PassName = "") {
+    for (auto [F, _] : LocatedRefs) {
+      bool DidModify = false;
+      for (FunctionPass* P : Passes) {
+        if (DumpModule) {
+          WithColor::note(outs(), PassName)
+            << "Pass: " << P->getPassName() << "\n";
+          outs().flush();
+        }
+        if (P->runOnFunction(*F))
+          DidModify = true;
+      }
+      if (DidModify && DumpModule) {
+        WithColor::note(outs(), PassName)
+          << F->getName() << " was modified.\n";
+      }
+    }
+  }
 
 private:
   static PrevFunctionInfo GetInfoAndUpdate(Function* F);
@@ -339,9 +365,10 @@ DeBaser::DeBaser(StringRef Filename, UnlinkRefs& Refs,
     return;
   if (!loadAndUpdateRefsFromModule())
     return;
-  
-  BI__debase_mark_begin = M->getFunction("__debase_mark_begin");
-  BI__debase_mark_end = M->getFunction("__debase_mark_end");
+  // Load builtins...
+  BI__debase_mark_begin   = M->getFunction("__debase_mark_begin");
+  BI__debase_mark_end     = M->getFunction("__debase_mark_end");
+  BI__debase_continuation = M->getFunction("__debase_continuation");
 }
 
 #define SetInfoWithAttrKind(MEMBER, KIND) do {																\
@@ -412,6 +439,7 @@ static int DebaseModules(ArrayRef<StringRef> Filenames,
   }
 
   DeBaser::Factory DBFactory(Refs, Argv, Context);
+  auto O1OptPasses = GetO1PassesRequiredForSimplification();
   for (StringRef Filename : Filenames) {
     auto DB = DBFactory.New(Filename);
     if (!DB.has_value()) {
@@ -423,6 +451,7 @@ static int DebaseModules(ArrayRef<StringRef> Filenames,
       continue;
     }
     
+    DB->runPasses(O1OptPasses);
   }
 
   return 0;
@@ -459,6 +488,16 @@ static int DebaseModule(StringRef Filename, char** argv, LLVMContext& Context) {
   // TODO: Figure out this fault (probably a debug/release thing...)
   DbgBuryPointer(std::move(M));
   return 0;
+}
+
+static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification() {
+  // TODO: Use PassBuilder!!!!
+  std::vector<FunctionPass*> Out;
+  Out.reserve(4);
+  //Out.push_back(createCFGSimplificationPass());
+  Out.push_back(createSROAPass(false));
+  Out.push_back(createInstructionCombiningPass());
+  return Out;
 }
 
 static void LLVMInitializeEverything() {
