@@ -19,15 +19,5 @@ include(LLVM)
 # option(ENABLE_FOO "Enable some setting..." OFF)
 # valued_option(MAX_BAR "Maximum amount of ..." 8)
 
-################################################################################
-## Debaser Runtime
-################################################################################
-
-add_library(debase-rt INTERFACE)
-add_library(debase::rt ALIAS debase-rt)
-
-add_executable(${PROJECT_NAME} Driver.cpp)
-target_link_libraries(${PROJECT_NAME} PRIVATE debase::LLVM)
-if(WIN32)
-	target_compile_definitions(${PROJECT_NAME} PUBLIC -D_HAS_ITERATOR_DEBUGGING=0)
-endif(WIN32)
+add_subdirectory(runtime)
+add_subdirectory(driver)
