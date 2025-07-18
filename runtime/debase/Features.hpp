@@ -34,6 +34,12 @@
 # error __has_cpp_attribute(x) is required!
 #endif
 
+#define DEBASE_XSTRINGIFY(...) #__VA_ARGS__
+#define DEBASE_STRINGIFY(...) DEBASE_XSTRINGIFY(__VA_ARGS__)
+
+#define DEBASE_EXPAND(...) __VA_ARGS__
+#define DEBASE_EXPAND2(PARENS) DEBASE_EXPAND PARENS
+
 #ifdef __cplusplus
 # define DEBASE_BEGIN_EXTERN_C extern "C" {
 # define DEBASE_END_EXTERN_C }
@@ -68,8 +74,21 @@
 # define DEBASE_PRESERVE_MOST
 #endif
 
+//============================================================================//
+// Annotations
+//============================================================================//
+
 /// Makes annotations as unintrusive as possible.
-#define DEBASE_ANNOTATION_CC																									\
-	DEBASE_NEVER_INLINE																													\
-	DEBASE_NO_TAIL																															\
-	DEBASE_PRESERVE_MOST
+#define DEBASE_ANNOTATION_CC                                                  \
+  DEBASE_NEVER_INLINE                                                         \
+  DEBASE_NO_TAIL                                                              \
+  DEBASE_PRESERVE_MOST
+
+/// Generates an annotation in the form `RET NAME(ARGS...)`.
+#define DEBASE_ANNOTATION_DEFINE(NAME, RET, ARGS)                             \
+DEBASE_ANNOTATION_CC RET NAME(DEBASE_EXPAND2(ARGS)) DEBASE_NOEXCEPT;
+
+/// Generates alias for `NAME -> __debase_NAME`.
+#define DEBASE_ANNOTATION_ALIAS(NAME)                                         \
+DEBASE_ANNOTATION_CC decltype(__debase_##NAME) NAME                           \
+  __asm__(DEBASE_STRINGIFY(__debase_##NAME));
