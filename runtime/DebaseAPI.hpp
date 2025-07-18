@@ -23,5 +23,6 @@
 
 #pragma once
 
+#include <debase/Config.hpp>
 #include <debase/Features.hpp>
 #include <debase/Annotations.hpp>
