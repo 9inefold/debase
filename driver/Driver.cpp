@@ -134,14 +134,48 @@ static void FixupFilename(std::string& InFilename) {
   InFilename = static_cast<std::string>(Filename);
 }
 
+static bool OptionIsHidden(cl::Option& Opt) {
+  const auto Flag = Opt.getOptionHiddenFlag();
+  return Flag == cl::Hidden || Flag == cl::ReallyHidden;
+}
+
+/// Like `cl::HideUnrelatedOptions`, but only partially hidden.
+static void SemiHideUnrelatedOptions(
+ cl::OptionCategory& In,
+ cl::SubCommand& Sub = cl::SubCommand::getTopLevel()
+) {
+  cl::OptionCategory& Generic = cl::getGeneralCategory();
+  for (auto& [Name, O] : Sub.OptionsMap) {
+    bool Unrelated = true;
+    if (OptionIsHidden(*O))
+      // Already hidden, skip.
+      continue;
+    for (auto& Cat : O->Categories) {
+      if (Cat == &Generic) {
+        Unrelated = true;
+        break;
+      }
+      if (Cat == &In)
+        Unrelated = false;
+    }
+    if (Unrelated)
+      O->setHiddenFlag(cl::Hidden);
+  }
+}
+
 static bool ParseCLArgs(int argc, char* const* argv) {
+  SemiHideUnrelatedOptions(DebaseToolCategory);
   cl::AddExtraVersionPrinter([](raw_ostream& OS) {
     OS << DEBASE_VENDOR_NAME  << ":\n  ";
     OS << DEBASE_PACKAGE_NAME << " version "
-       << DEBASE_PACKAGE_VERSION;
+       << DEBASE_PACKAGE_VERSION << "\n  ";
+#ifdef NDEBUG
+    OS << "Optimized build";
+#else
+    OS << "Debug build";
+#endif
     OS << ".\n";
   });
-  cl::HideUnrelatedOptions(DebaseToolCategory);
   return cl::ParseCommandLineOptions(argc, argv,
     "debaser compile pass\n", &errs());
 }
