@@ -40,6 +40,7 @@
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
+#include <debase/Config.hpp>
 #include <memory>
 #include <optional>
 #include <string>
@@ -134,6 +135,12 @@ static void FixupFilename(std::string& InFilename) {
 }
 
 static bool ParseCLArgs(int argc, char* const* argv) {
+  cl::AddExtraVersionPrinter([](raw_ostream& OS) {
+    OS << DEBASE_VENDOR_NAME  << ":\n  ";
+    OS << DEBASE_PACKAGE_NAME << " version "
+       << DEBASE_PACKAGE_VERSION;
+    OS << ".\n";
+  });
   cl::HideUnrelatedOptions(DebaseToolCategory);
   return cl::ParseCommandLineOptions(argc, argv,
     "debaser compile pass\n", &errs());

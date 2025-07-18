@@ -7,8 +7,8 @@ if(NOT APPLE)
 endif()
 
 project(
-  debaser
-  VERSION 0.0.1
+  debase
+  VERSION 0.0.2
   LANGUAGES CXX C
 )
 
@@ -16,8 +16,7 @@ include(SetFlags)
 include(SetOptions)
 include(LLVM)
 
-# option(ENABLE_FOO "Enable some setting..." OFF)
-# valued_option(MAX_BAR "Maximum amount of ..." 8)
+valued_option(DEBASE_VENDOR_NAME "Name used in --version." "Debaser")
 
 add_subdirectory(runtime)
 add_subdirectory(driver)

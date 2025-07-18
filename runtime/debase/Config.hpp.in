@@ -1,0 +1,40 @@
+//===- debase/Config.hpp --------------------------------------------------===//
+//
+// Copyright (C) 2025 Eightfold
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+//     limitations under the License.
+//
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+/// Debase version `[Major].Minor.Patch`
+#define DEBASE_VERSION_MAJOR @DEBASE_VERSION_MAJOR@
+/// Debase version `Major.[Minor].Patch`
+#define DEBASE_VERSION_MINOR @DEBASE_VERSION_MINOR@
+/// Debase version `Major.Minor.[Patch]`
+#define DEBASE_VERSION_PATCH @DEBASE_VERSION_PATCH@
+/// The CMake build type (Debug/Release)
+#define DEBASE_BUILD_TYPE    "@CMAKE_BUILD_TYPE@"
+
+/// Debase version `"Major.Minor.Patch"`
+#define DEBASE_VERSION_STRING "@DEBASE_VERSION@"
+/// The CMake build type string
+#define DEBASE_BUILD_STRING   "@CMAKE_BUILD_TYPE@"
+
+/// Full name of the vendor.
+#define DEBASE_VENDOR_NAME "@DEBASE_VENDOR_NAME@"
+/// Full name of the package.
+#define DEBASE_PACKAGE_NAME "debase"
+/// Full version of the package.
+#define DEBASE_PACKAGE_VERSION DEBASE_VERSION_STRING
