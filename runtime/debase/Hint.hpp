@@ -45,9 +45,14 @@ DEBASE_ANNOTATION_CC void __debase_mark_end(void);
 /// Marks the end of a destructor body. Rarely needed.
 #define __debase_dtor_end() __debase_mark_begin()
 
+/// Marks that there is a continuation for this function.
+DEBASE_ANNOTATION_CC void __debase_continuation(void) DEBASE_NOEXCEPT;
+
 DEBASE_END_EXTERN_C
 
-////////////////////////////////////////////////////////////////////////////////
+//============================================================================//
+// C++ Definitions
+//============================================================================//
 
 #ifdef __cplusplus
 namespace debase {
@@ -75,6 +80,11 @@ DEBASE_ANNOTATION_CC void dtor_begin(void)
 /// Marks the end of a destructor body.
 DEBASE_ANNOTATION_CC void dtor_end(void)
 	__asm__("__debase_mark_end");
+
+/// Marks that there is a continuation for this function.
+DEBASE_ANNOTATION_CC void continuation(void) DEBASE_NOEXCEPT
+	__asm__("__debase_continuation");
+
 
 } // namespace debase
 #endif

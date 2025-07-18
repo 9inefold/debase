@@ -37,9 +37,11 @@
 #ifdef __cplusplus
 # define DEBASE_BEGIN_EXTERN_C extern "C" {
 # define DEBASE_END_EXTERN_C }
+# define DEBASE_NOEXCEPT noexcept
 #else
 # define DEBASE_BEGIN_EXTERN_C
 # define DEBASE_END_EXTERN_C
+# define DEBASE_NOEXCEPT
 #endif
 
 #if __has_attribute(always_inline)
