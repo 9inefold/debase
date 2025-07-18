@@ -31,4 +31,14 @@ extern bool Strict;
 /// Enabled if and only if `-mode=permissive`.
 extern bool Permissive;
 
+/// Creates a new string error by forwarding the arguments to
+/// `llvm::createStringError`.
+template <typename...ArgsT>
+inline llvm::Error MakeError(ArgsT&&...Args) {
+  return llvm::createStringError(
+    llvm::inconvertibleErrorCode(),
+    std::forward<ArgsT>(Args)...
+  );
+}
+
 } // namespace debase_tool

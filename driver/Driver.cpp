@@ -219,14 +219,6 @@ int main(int argc, char** argv) {
   );
 }
 
-template <typename...ArgsT>
-static Error MakeError(ArgsT&&...Args) {
-  return createStringError(
-    llvm::inconvertibleErrorCode(),
-    std::forward<ArgsT>(Args)...
-  );
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Debaser
 
