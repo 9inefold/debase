@@ -17,11 +17,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "Shared.hpp"
+#include "UnlinkRefs.hpp"
 #include "llvm/InitializePasses.h"
 #include "llvm/PassRegistry.h"
 // #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/StringSet.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Option/OptTable.h"
 #include "llvm/Option/Option.h"
@@ -88,7 +88,6 @@ Hardening(
     clEnumVal(strict,     "Extra checks, exits instead of warning"),
     clEnumVal(permissive, "Less checks, warns when possible")),
   cl::callback([](const HardeningMode& M) {
-    errs() << "-M" << unsigned(M) << '\n';
     auto HMFlags = std::tie(Strict, Permissive);
     if (M == normal)
       HMFlags = std::pair{false, false};
@@ -226,112 +225,6 @@ static Error MakeError(ArgsT&&...Args) {
     llvm::inconvertibleErrorCode(),
     std::forward<ArgsT>(Args)...
   );
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// UnlinkRefs
-
-namespace {
-
-/// Holds all the unlink identifiers which can be searched through later.
-class UnlinkRefs {
-  BumpPtrAllocator BP;
-  /// The set of simple names.
-  StringSet<BumpPtrAllocator&> SimpleUnlinks;
-  /// Blah blah
-  bool Failed = false;
-
-public:
-  UnlinkRefs(ArrayRef<std::string> Unlinks) : SimpleUnlinks(BP) {
-    this->compileUnlinks(Unlinks);
-  }
-
-  bool didFail() const { return Failed; }
-  size_t simpleCount() const { return SimpleUnlinks.size(); }
-  size_t complexCount() const { return 0; }
-
-  /// Tries to match a function name against every ref.
-  bool match(StringRef Name) {
-    assert(!Failed);
-    return SimpleUnlinks.contains(Name);
-  }
-
-private:
-  /// "Compiles" the unlink data.
-  void compileUnlinks(ArrayRef<std::string> Unlinks);
-  /// Gets the symbol for a simple symbol.
-  void compileSimpleUnlink(StringRef FullName);
-  /// Writes a simple name to `SimpleUnlinks`.
-  void addSimpleUnlink(ArrayRef<StringRef> Parts);
-  /// If not permissive, sets `Failed` to `true`, otherwise prints `Msg` to `errs()`.
-  void failOrPrint(StringRef Msg = "") {
-    if (!Permissive)
-      this->Failed = true;
-    else
-      errs() << Msg;
-  }
-};
-
-} // namespace `anonymous`
-
-void UnlinkRefs::addSimpleUnlink(ArrayRef<StringRef> Parts) {
-  SmallString<128> MangledName;
-  raw_svector_ostream OS(MangledName);
-
-  OS << "_ZN";
-  if (Parts.front() == "std") {
-    OS << "St";
-    Parts = Parts.drop_front();
-  }
-  for (StringRef Part : Parts)
-    OS << Part.size() << Part;
-#if 0
-  // [deleting destructor]
-  OS << "D0Ev";
-  SimpleUnlinks.insert(MangledName);
-  MangledName.pop_back_n(4);
-#endif
-  // [base object destructor]
-  OS << "D2Ev";
-  SimpleUnlinks.insert(MangledName);
-}
-
-LLVM_ATTRIBUTE_NOINLINE static
-bool CompareSimpleNSSplit(StringRef FullName, ArrayRef<StringRef> Parts) {
-  SmallVector<StringRef, 8> OtherParts;
-  FullName.split(OtherParts, "::", -1, true);
-  return Parts.equals(OtherParts);
-}
-
-void UnlinkRefs::compileSimpleUnlink(StringRef FullName) {
-  SmallVector<StringRef, 8> Parts;
-  FullName.split(Parts, "::", -1, false);
-  if (Strict && !CompareSimpleNSSplit(FullName, Parts)) {
-    errs() << "Invalid name: '" << FullName << "'. Contains empty parts.\n";
-    this->Failed = true;
-    return;
-  }
-
-  for (StringRef& Part : Parts)
-    // Remove leading and trailing spaces.
-    Part = Part.ltrim().rtrim();
-  // Generate the mangled symbols.
-  this->addSimpleUnlink(Parts);
-}
-
-void UnlinkRefs::compileUnlinks(ArrayRef<std::string> Unlinks) {
-  for (StringRef FullName : Unlinks) {
-    const auto FirstNonRegularChar
-      = FullName.find_first_of("?*+@$[]<>");
-    if (FirstNonRegularChar != StringRef::npos) {
-      errs() << "Unimplemented identifier type: '"
-        << FullName << "' (only simple IDs are supported). ";
-      failOrPrint("Skipping.");
-      errs() << '\n';
-      continue;
-    }
-    this->compileSimpleUnlink(FullName);
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -598,6 +491,10 @@ static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification() {
   // TODO: Use PassBuilder!!!!
   std::vector<FunctionPass*> Out;
   Out.reserve(4);
+  // EntryExitInstrumenterPass
+  // AlwaysInlinerPass?
+  // CoroConditionalPass
+  // AnnotationRemarksPass
   //Out.push_back(createCFGSimplificationPass());
   Out.push_back(createSROAPass(false));
   Out.push_back(createInstructionCombiningPass());

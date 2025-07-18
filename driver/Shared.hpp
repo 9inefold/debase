@@ -18,7 +18,9 @@
 
 #pragma once
 
+#include "LLVM.hpp"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Error.h"
 
 namespace debase_tool {
 
