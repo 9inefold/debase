@@ -2,13 +2,13 @@
 #include <debase/Annotations.hpp>
 #include <cstdio>
 
-NOINLINE A::~A() {
+A::~A() {
   __debase_dtor_begin();
   std::printf("A!\n");
   __debase_dtor_end();
 }
 
-NOINLINE B::~B() {
+B::~B() {
   std::printf("B!\n");
   debase::dtor_end();
 }

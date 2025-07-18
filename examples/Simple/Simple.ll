@@ -1,5 +1,5 @@
 ; ModuleID = 'Simple.cpp'
-; Commandline = clang++ -I -O0 -g -S -emit-llvm -DDISABLE_NOINLINE=1 Simple.cpp -o SimpleI.ll
+; CommandLine = 'clang++ -I../../runtime -O0 -g -S -emit-llvm -Xclang -disable-llvm-passes Simple.cpp -o Simple.ll'
 source_filename = "Simple.cpp"
 target datalayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-w64-windows-gnu"
@@ -44,31 +44,36 @@ define dso_local void @_ZN1AD2Ev(ptr noundef nonnull align 8 dereferenceable(8) 
   call void @llvm.dbg.declare(metadata ptr %2, metadata !228, metadata !DIExpression()), !dbg !230
   %3 = load ptr, ptr %2, align 8
   store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV1A, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !231
+  notail call preserve_mostcc void @__debase_mark_begin() #6, !dbg !232
   %4 = invoke i32 (ptr, ...) @printf(ptr noundef @.str)
-          to label %5 unwind label %6, !dbg !232
+          to label %5 unwind label %6, !dbg !234
 
 5:                                                ; preds = %1
-  ret void, !dbg !234
+  notail call preserve_mostcc void @__debase_mark_begin() #6, !dbg !235
+  ret void, !dbg !236
 
 6:                                                ; preds = %1
   %7 = landingpad { ptr, i32 }
-          catch ptr null, !dbg !232
-  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !232
-  call void @__clang_call_terminate(ptr %8) #5, !dbg !232
-  unreachable, !dbg !232
+          catch ptr null, !dbg !234
+  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !234
+  call void @__clang_call_terminate(ptr %8) #7, !dbg !234
+  unreachable, !dbg !234
 }
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #1
 
-declare dso_local i32 @printf(ptr noundef, ...) #2
+; Function Attrs: nounwind
+declare dso_local preserve_mostcc void @__debase_mark_begin() #2
+
+declare dso_local i32 @printf(ptr noundef, ...) #3
 
 declare dso_local i32 @__gxx_personality_seh0(...)
 
 ; Function Attrs: noinline noreturn nounwind uwtable
-define linkonce_odr hidden void @__clang_call_terminate(ptr noundef %0) #3 comdat {
+define linkonce_odr hidden void @__clang_call_terminate(ptr noundef %0) #4 comdat {
   %2 = call ptr @__cxa_begin_catch(ptr %0) #6
-  call void @_ZSt9terminatev() #5
+  call void @_ZSt9terminatev() #7
   unreachable
 }
 
@@ -77,110 +82,112 @@ declare dso_local ptr @__cxa_begin_catch(ptr)
 declare dso_local void @_ZSt9terminatev()
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN1AD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !235 {
+define dso_local void @_ZN1AD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !237 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !236, metadata !DIExpression()), !dbg !237
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !238, metadata !DIExpression()), !dbg !239
   %3 = load ptr, ptr %2, align 8
-  call void @_ZN1AD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !238
-  call void @_ZdlPv(ptr noundef %3) #7, !dbg !238
-  ret void, !dbg !239
+  call void @_ZN1AD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !240
+  call void @_ZdlPv(ptr noundef %3) #8, !dbg !240
+  ret void, !dbg !241
 }
 
 ; Function Attrs: nobuiltin nounwind
-declare dso_local void @_ZdlPv(ptr noundef) #4
+declare dso_local void @_ZdlPv(ptr noundef) #5
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN1BD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !240 {
+define dso_local void @_ZN1BD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !242 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !249, metadata !DIExpression()), !dbg !251
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !251, metadata !DIExpression()), !dbg !253
   %3 = load ptr, ptr %2, align 8
-  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV1B, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !252
+  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV1B, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !254
   %4 = invoke i32 (ptr, ...) @printf(ptr noundef @.str.1)
-          to label %5 unwind label %6, !dbg !253
+          to label %5 unwind label %6, !dbg !255
 
 5:                                                ; preds = %1
-  call void @_ZN1AD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !255
-  ret void, !dbg !256
+  notail call preserve_mostcc void @__debase_mark_begin() #6, !dbg !257
+  call void @_ZN1AD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !258
+  ret void, !dbg !259
 
 6:                                                ; preds = %1
   %7 = landingpad { ptr, i32 }
-          catch ptr null, !dbg !253
-  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !253
-  call void @__clang_call_terminate(ptr %8) #5, !dbg !253
-  unreachable, !dbg !253
+          catch ptr null, !dbg !255
+  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !255
+  call void @__clang_call_terminate(ptr %8) #7, !dbg !255
+  unreachable, !dbg !255
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN1BD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !257 {
+define dso_local void @_ZN1BD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !260 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !258, metadata !DIExpression()), !dbg !259
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !261, metadata !DIExpression()), !dbg !262
   %3 = load ptr, ptr %2, align 8
-  call void @_ZN1BD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !260
-  call void @_ZdlPv(ptr noundef %3) #7, !dbg !260
-  ret void, !dbg !261
+  call void @_ZN1BD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !263
+  call void @_ZdlPv(ptr noundef %3) #8, !dbg !263
+  ret void, !dbg !264
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN1CD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !262 {
+define dso_local void @_ZN1CD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !265 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !271, metadata !DIExpression()), !dbg !273
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !274, metadata !DIExpression()), !dbg !276
   %3 = load ptr, ptr %2, align 8
-  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV1C, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !274
+  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV1C, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !277
   %4 = invoke i32 (ptr, ...) @printf(ptr noundef @.str.2)
-          to label %5 unwind label %6, !dbg !275
+          to label %5 unwind label %6, !dbg !278
 
 5:                                                ; preds = %1
-  call void @_ZN1BD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !277
-  ret void, !dbg !278
+  call void @_ZN1BD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !280
+  ret void, !dbg !281
 
 6:                                                ; preds = %1
   %7 = landingpad { ptr, i32 }
-          catch ptr null, !dbg !275
-  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !275
-  call void @__clang_call_terminate(ptr %8) #5, !dbg !275
-  unreachable, !dbg !275
+          catch ptr null, !dbg !278
+  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !278
+  call void @__clang_call_terminate(ptr %8) #7, !dbg !278
+  unreachable, !dbg !278
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN1CD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !279 {
+define dso_local void @_ZN1CD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !282 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !280, metadata !DIExpression()), !dbg !281
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !283, metadata !DIExpression()), !dbg !284
   %3 = load ptr, ptr %2, align 8
-  call void @_ZN1CD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !282
-  call void @_ZdlPv(ptr noundef %3) #7, !dbg !282
-  ret void, !dbg !283
+  call void @_ZN1CD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !285
+  call void @_ZdlPv(ptr noundef %3) #8, !dbg !285
+  ret void, !dbg !286
 }
 
 attributes #0 = { mustprogress noinline nounwind optnone uwtable "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #1 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
-attributes #2 = { "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #3 = { noinline noreturn nounwind uwtable "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #4 = { nobuiltin nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #5 = { noreturn nounwind }
+attributes #2 = { nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #3 = { "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #4 = { noinline noreturn nounwind uwtable "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #5 = { nobuiltin nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 attributes #6 = { nounwind }
-attributes #7 = { builtin nounwind }
+attributes #7 = { noreturn nounwind }
+attributes #8 = { builtin nounwind }
 
 !llvm.dbg.cu = !{!12}
 !llvm.module.flags = !{!208, !209, !210, !211, !212, !213}
 !llvm.ident = !{!214}
 
 !0 = !DIGlobalVariableExpression(var: !1, expr: !DIExpression())
-!1 = distinct !DIGlobalVariable(scope: null, file: !2, line: 5, type: !3, isLocal: true, isDefinition: true)
-!2 = !DIFile(filename: "Simple.cpp", directory: "C:/Users/alex/Documents/GitHub/debase/examples/simple")
+!1 = distinct !DIGlobalVariable(scope: null, file: !2, line: 7, type: !3, isLocal: true, isDefinition: true)
+!2 = !DIFile(filename: "Simple.cpp", directory: "C:/Users/alex/Documents/GitHub/debase/examples/Simple")
 !3 = !DICompositeType(tag: DW_TAG_array_type, baseType: !4, size: 32, elements: !6)
 !4 = !DIDerivedType(tag: DW_TAG_const_type, baseType: !5)
 !5 = !DIBasicType(name: "char", size: 8, encoding: DW_ATE_signed_char)
 !6 = !{!7}
 !7 = !DISubrange(count: 4)
 !8 = !DIGlobalVariableExpression(var: !9, expr: !DIExpression())
-!9 = distinct !DIGlobalVariable(scope: null, file: !2, line: 9, type: !3, isLocal: true, isDefinition: true)
+!9 = distinct !DIGlobalVariable(scope: null, file: !2, line: 12, type: !3, isLocal: true, isDefinition: true)
 !10 = !DIGlobalVariableExpression(var: !11, expr: !DIExpression())
-!11 = distinct !DIGlobalVariable(scope: null, file: !2, line: 13, type: !3, isLocal: true, isDefinition: true)
+!11 = distinct !DIGlobalVariable(scope: null, file: !2, line: 17, type: !3, isLocal: true, isDefinition: true)
 !12 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus_14, file: !2, producer: "clang version 18.1.8", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, globals: !13, imports: !14, splitDebugInlining: false, nameTableKind: None)
 !13 = !{!0, !8, !10}
 !14 = !{!15, !22, !25, !29, !35, !37, !44, !48, !54, !56, !60, !64, !68, !76, !80, !84, !88, !92, !94, !98, !102, !106, !108, !110, !112, !118, !125, !131, !136, !142, !146, !150, !152, !154, !156, !160, !164, !168, !172, !176, !180, !184, !188, !192, !196, !198, !202, !204}
@@ -384,72 +391,75 @@ attributes #7 = { builtin nounwind }
 !212 = !{i32 7, !"uwtable", i32 2}
 !213 = !{i32 1, !"MaxTLSAlign", i32 65536}
 !214 = !{!"clang version 18.1.8"}
-!215 = distinct !DISubprogram(name: "~A", linkageName: "_ZN1AD2Ev", scope: !216, file: !2, line: 4, type: !223, scopeLine: 4, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !226, retainedNodes: !227)
-!216 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "A", file: !217, line: 12, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !218, vtableHolder: !216)
-!217 = !DIFile(filename: "./Simple.hpp", directory: "C:/Users/alex/Documents/GitHub/debase/examples/simple")
+!215 = distinct !DISubprogram(name: "~A", linkageName: "_ZN1AD2Ev", scope: !216, file: !2, line: 5, type: !223, scopeLine: 5, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !226, retainedNodes: !227)
+!216 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "A", file: !217, line: 9, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !218, vtableHolder: !216)
+!217 = !DIFile(filename: "./Simple.hpp", directory: "C:/Users/alex/Documents/GitHub/debase/examples/Simple")
 !218 = !{!219, !222, !226}
 !219 = !DIDerivedType(tag: DW_TAG_member, name: "_vptr$A", scope: !217, file: !217, baseType: !220, size: 64, flags: DIFlagArtificial)
 !220 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !221, size: 64)
 !221 = !DIDerivedType(tag: DW_TAG_pointer_type, name: "__vtbl_ptr_type", baseType: !186, size: 64)
-!222 = !DISubprogram(name: "A", scope: !216, file: !217, line: 13, type: !223, scopeLine: 13, flags: DIFlagPrototyped, spFlags: 0)
+!222 = !DISubprogram(name: "A", scope: !216, file: !217, line: 10, type: !223, scopeLine: 10, flags: DIFlagPrototyped, spFlags: 0)
 !223 = !DISubroutineType(types: !224)
 !224 = !{null, !225}
 !225 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !216, size: 64, flags: DIFlagArtificial | DIFlagObjectPointer)
-!226 = !DISubprogram(name: "~A", scope: !216, file: !217, line: 14, type: !223, scopeLine: 14, containingType: !216, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual)
+!226 = !DISubprogram(name: "~A", scope: !216, file: !217, line: 11, type: !223, scopeLine: 11, containingType: !216, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual)
 !227 = !{}
 !228 = !DILocalVariable(name: "this", arg: 1, scope: !215, type: !229, flags: DIFlagArtificial | DIFlagObjectPointer)
 !229 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !216, size: 64)
 !230 = !DILocation(line: 0, scope: !215)
-!231 = !DILocation(line: 4, column: 18, scope: !215)
-!232 = !DILocation(line: 5, column: 3, scope: !233)
-!233 = distinct !DILexicalBlock(scope: !215, file: !2, line: 4, column: 18)
-!234 = !DILocation(line: 6, column: 1, scope: !215)
-!235 = distinct !DISubprogram(name: "~A", linkageName: "_ZN1AD0Ev", scope: !216, file: !2, line: 4, type: !223, scopeLine: 4, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !226, retainedNodes: !227)
-!236 = !DILocalVariable(name: "this", arg: 1, scope: !235, type: !229, flags: DIFlagArtificial | DIFlagObjectPointer)
-!237 = !DILocation(line: 0, scope: !235)
-!238 = !DILocation(line: 4, column: 18, scope: !235)
-!239 = !DILocation(line: 6, column: 1, scope: !235)
-!240 = distinct !DISubprogram(name: "~B", linkageName: "_ZN1BD2Ev", scope: !241, file: !2, line: 8, type: !245, scopeLine: 8, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !248, retainedNodes: !227)
-!241 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "B", file: !217, line: 17, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !242, vtableHolder: !216)
-!242 = !{!243, !244, !248}
-!243 = !DIDerivedType(tag: DW_TAG_inheritance, scope: !241, baseType: !216, extraData: i32 0)
-!244 = !DISubprogram(name: "B", scope: !241, file: !217, line: 18, type: !245, scopeLine: 18, flags: DIFlagPrototyped, spFlags: 0)
-!245 = !DISubroutineType(types: !246)
-!246 = !{null, !247}
-!247 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !241, size: 64, flags: DIFlagArtificial | DIFlagObjectPointer)
-!248 = !DISubprogram(name: "~B", scope: !241, file: !217, line: 19, type: !245, scopeLine: 19, containingType: !241, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual)
-!249 = !DILocalVariable(name: "this", arg: 1, scope: !240, type: !250, flags: DIFlagArtificial | DIFlagObjectPointer)
-!250 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !241, size: 64)
-!251 = !DILocation(line: 0, scope: !240)
-!252 = !DILocation(line: 8, column: 18, scope: !240)
-!253 = !DILocation(line: 9, column: 3, scope: !254)
-!254 = distinct !DILexicalBlock(scope: !240, file: !2, line: 8, column: 18)
-!255 = !DILocation(line: 10, column: 1, scope: !254)
-!256 = !DILocation(line: 10, column: 1, scope: !240)
-!257 = distinct !DISubprogram(name: "~B", linkageName: "_ZN1BD0Ev", scope: !241, file: !2, line: 8, type: !245, scopeLine: 8, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !248, retainedNodes: !227)
-!258 = !DILocalVariable(name: "this", arg: 1, scope: !257, type: !250, flags: DIFlagArtificial | DIFlagObjectPointer)
-!259 = !DILocation(line: 0, scope: !257)
-!260 = !DILocation(line: 8, column: 18, scope: !257)
-!261 = !DILocation(line: 10, column: 1, scope: !257)
-!262 = distinct !DISubprogram(name: "~C", linkageName: "_ZN1CD2Ev", scope: !263, file: !2, line: 12, type: !267, scopeLine: 12, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !270, retainedNodes: !227)
-!263 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "C", file: !217, line: 22, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !264, vtableHolder: !216)
-!264 = !{!265, !266, !270}
-!265 = !DIDerivedType(tag: DW_TAG_inheritance, scope: !263, baseType: !241, extraData: i32 0)
-!266 = !DISubprogram(name: "C", scope: !263, file: !217, line: 23, type: !267, scopeLine: 23, flags: DIFlagPrototyped, spFlags: 0)
-!267 = !DISubroutineType(types: !268)
-!268 = !{null, !269}
-!269 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !263, size: 64, flags: DIFlagArtificial | DIFlagObjectPointer)
-!270 = !DISubprogram(name: "~C", scope: !263, file: !217, line: 24, type: !267, scopeLine: 24, containingType: !263, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual)
-!271 = !DILocalVariable(name: "this", arg: 1, scope: !262, type: !272, flags: DIFlagArtificial | DIFlagObjectPointer)
-!272 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !263, size: 64)
-!273 = !DILocation(line: 0, scope: !262)
-!274 = !DILocation(line: 12, column: 18, scope: !262)
-!275 = !DILocation(line: 13, column: 3, scope: !276)
-!276 = distinct !DILexicalBlock(scope: !262, file: !2, line: 12, column: 18)
-!277 = !DILocation(line: 14, column: 1, scope: !276)
-!278 = !DILocation(line: 14, column: 1, scope: !262)
-!279 = distinct !DISubprogram(name: "~C", linkageName: "_ZN1CD0Ev", scope: !263, file: !2, line: 12, type: !267, scopeLine: 12, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !270, retainedNodes: !227)
-!280 = !DILocalVariable(name: "this", arg: 1, scope: !279, type: !272, flags: DIFlagArtificial | DIFlagObjectPointer)
-!281 = !DILocation(line: 0, scope: !279)
-!282 = !DILocation(line: 12, column: 18, scope: !279)
-!283 = !DILocation(line: 14, column: 1, scope: !279)
+!231 = !DILocation(line: 5, column: 9, scope: !215)
+!232 = !DILocation(line: 6, column: 3, scope: !233)
+!233 = distinct !DILexicalBlock(scope: !215, file: !2, line: 5, column: 9)
+!234 = !DILocation(line: 7, column: 3, scope: !233)
+!235 = !DILocation(line: 8, column: 3, scope: !233)
+!236 = !DILocation(line: 9, column: 1, scope: !215)
+!237 = distinct !DISubprogram(name: "~A", linkageName: "_ZN1AD0Ev", scope: !216, file: !2, line: 5, type: !223, scopeLine: 5, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !226, retainedNodes: !227)
+!238 = !DILocalVariable(name: "this", arg: 1, scope: !237, type: !229, flags: DIFlagArtificial | DIFlagObjectPointer)
+!239 = !DILocation(line: 0, scope: !237)
+!240 = !DILocation(line: 5, column: 9, scope: !237)
+!241 = !DILocation(line: 9, column: 1, scope: !237)
+!242 = distinct !DISubprogram(name: "~B", linkageName: "_ZN1BD2Ev", scope: !243, file: !2, line: 11, type: !247, scopeLine: 11, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !250, retainedNodes: !227)
+!243 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "B", file: !217, line: 14, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !244, vtableHolder: !216)
+!244 = !{!245, !246, !250}
+!245 = !DIDerivedType(tag: DW_TAG_inheritance, scope: !243, baseType: !216, extraData: i32 0)
+!246 = !DISubprogram(name: "B", scope: !243, file: !217, line: 15, type: !247, scopeLine: 15, flags: DIFlagPrototyped, spFlags: 0)
+!247 = !DISubroutineType(types: !248)
+!248 = !{null, !249}
+!249 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !243, size: 64, flags: DIFlagArtificial | DIFlagObjectPointer)
+!250 = !DISubprogram(name: "~B", scope: !243, file: !217, line: 16, type: !247, scopeLine: 16, containingType: !243, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual)
+!251 = !DILocalVariable(name: "this", arg: 1, scope: !242, type: !252, flags: DIFlagArtificial | DIFlagObjectPointer)
+!252 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !243, size: 64)
+!253 = !DILocation(line: 0, scope: !242)
+!254 = !DILocation(line: 11, column: 9, scope: !242)
+!255 = !DILocation(line: 12, column: 3, scope: !256)
+!256 = distinct !DILexicalBlock(scope: !242, file: !2, line: 11, column: 9)
+!257 = !DILocation(line: 13, column: 3, scope: !256)
+!258 = !DILocation(line: 14, column: 1, scope: !256)
+!259 = !DILocation(line: 14, column: 1, scope: !242)
+!260 = distinct !DISubprogram(name: "~B", linkageName: "_ZN1BD0Ev", scope: !243, file: !2, line: 11, type: !247, scopeLine: 11, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !250, retainedNodes: !227)
+!261 = !DILocalVariable(name: "this", arg: 1, scope: !260, type: !252, flags: DIFlagArtificial | DIFlagObjectPointer)
+!262 = !DILocation(line: 0, scope: !260)
+!263 = !DILocation(line: 11, column: 9, scope: !260)
+!264 = !DILocation(line: 14, column: 1, scope: !260)
+!265 = distinct !DISubprogram(name: "~C", linkageName: "_ZN1CD2Ev", scope: !266, file: !2, line: 16, type: !270, scopeLine: 16, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !273, retainedNodes: !227)
+!266 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "C", file: !217, line: 19, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !267, vtableHolder: !216)
+!267 = !{!268, !269, !273}
+!268 = !DIDerivedType(tag: DW_TAG_inheritance, scope: !266, baseType: !243, extraData: i32 0)
+!269 = !DISubprogram(name: "C", scope: !266, file: !217, line: 20, type: !270, scopeLine: 20, flags: DIFlagPrototyped, spFlags: 0)
+!270 = !DISubroutineType(types: !271)
+!271 = !{null, !272}
+!272 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !266, size: 64, flags: DIFlagArtificial | DIFlagObjectPointer)
+!273 = !DISubprogram(name: "~C", scope: !266, file: !217, line: 21, type: !270, scopeLine: 21, containingType: !266, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual)
+!274 = !DILocalVariable(name: "this", arg: 1, scope: !265, type: !275, flags: DIFlagArtificial | DIFlagObjectPointer)
+!275 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !266, size: 64)
+!276 = !DILocation(line: 0, scope: !265)
+!277 = !DILocation(line: 16, column: 18, scope: !265)
+!278 = !DILocation(line: 17, column: 3, scope: !279)
+!279 = distinct !DILexicalBlock(scope: !265, file: !2, line: 16, column: 18)
+!280 = !DILocation(line: 18, column: 1, scope: !279)
+!281 = !DILocation(line: 18, column: 1, scope: !265)
+!282 = distinct !DISubprogram(name: "~C", linkageName: "_ZN1CD0Ev", scope: !266, file: !2, line: 16, type: !270, scopeLine: 16, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12, declaration: !273, retainedNodes: !227)
+!283 = !DILocalVariable(name: "this", arg: 1, scope: !282, type: !275, flags: DIFlagArtificial | DIFlagObjectPointer)
+!284 = !DILocation(line: 0, scope: !282)
+!285 = !DILocation(line: 16, column: 18, scope: !282)
+!286 = !DILocation(line: 18, column: 1, scope: !282)
