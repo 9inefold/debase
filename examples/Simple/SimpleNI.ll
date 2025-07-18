@@ -1,10 +1,8 @@
 ; ModuleID = 'Simple.cpp'
-; CommandLine = clang++ -I../../runtime -O1 -g -S -emit-llvm -DDISABLE_NOINLINE=0 Simple.cpp -o SimpleNI.ll
+; Commandline = clang++ -I../../runtime -O1 -g -S -emit-llvm -DDISABLE_NOINLINE=0 Simple.cpp -o SimpleNI.ll
 source_filename = "Simple.cpp"
 target datalayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-w64-windows-gnu"
-
-$__clang_call_terminate = comdat any
 
 $_ZTS1A = comdat any
 
@@ -41,78 +39,46 @@ $_ZTI1C = comdat any
 define dso_local void @_ZN1AD2Ev(ptr nocapture noundef nonnull writeonly align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !216 {
   tail call void @llvm.dbg.value(metadata ptr %0, metadata !229, metadata !DIExpression()), !dbg !231
   store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV1A, i64 0, inrange i32 0, i64 2), ptr %0, align 8, !dbg !232, !tbaa !233
-  invoke preserve_mostcc void @__debase_mark_begin()
-          to label %2 unwind label %5, !dbg !236
-
-2:                                                ; preds = %1
-  %3 = tail call i32 @puts(ptr nonnull dereferenceable(1) @str), !dbg !238
-  invoke preserve_mostcc void @__debase_mark_begin()
-          to label %4 unwind label %5, !dbg !239
-
-4:                                                ; preds = %2
+  notail call preserve_mostcc void @__debase_mark_begin() #5, !dbg !236
+  %2 = tail call i32 @puts(ptr nonnull dereferenceable(1) @str), !dbg !238
+  notail call preserve_mostcc void @__debase_mark_begin() #5, !dbg !239
   ret void, !dbg !240
-
-5:                                                ; preds = %2, %1
-  %6 = landingpad { ptr, i32 }
-          catch ptr null, !dbg !236
-  %7 = extractvalue { ptr, i32 } %6, 0, !dbg !236
-  tail call void @__clang_call_terminate(ptr %7) #6, !dbg !236
-  unreachable, !dbg !236
 }
 
+; Function Attrs: nounwind
 declare !dbg !241 dso_local preserve_mostcc void @__debase_mark_begin() local_unnamed_addr #1
 
 declare dso_local i32 @__gxx_personality_seh0(...)
 
-; Function Attrs: noinline noreturn nounwind uwtable
-define linkonce_odr hidden void @__clang_call_terminate(ptr noundef %0) local_unnamed_addr #2 comdat {
-  %2 = tail call ptr @__cxa_begin_catch(ptr %0) #7
-  tail call void @_ZSt9terminatev() #6
-  unreachable
-}
-
-declare dso_local ptr @__cxa_begin_catch(ptr) local_unnamed_addr
-
-declare dso_local void @_ZSt9terminatev() local_unnamed_addr
-
 ; Function Attrs: mustprogress noinline nounwind uwtable
 define dso_local void @_ZN1AD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !245 {
   tail call void @llvm.dbg.value(metadata ptr %0, metadata !247, metadata !DIExpression()), !dbg !248
-  tail call void @_ZN1AD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #7, !dbg !249
-  tail call void @_ZdlPv(ptr noundef nonnull %0) #8, !dbg !249
+  tail call void @_ZN1AD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #5, !dbg !249
+  tail call void @_ZdlPv(ptr noundef nonnull %0) #6, !dbg !249
   ret void, !dbg !250
 }
 
 ; Function Attrs: nobuiltin nounwind
-declare dso_local void @_ZdlPv(ptr noundef) local_unnamed_addr #3
+declare dso_local void @_ZdlPv(ptr noundef) local_unnamed_addr #2
 
 ; Function Attrs: mustprogress noinline nounwind uwtable
 define dso_local void @_ZN1BD2Ev(ptr nocapture noundef nonnull writeonly align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !251 {
   tail call void @llvm.dbg.value(metadata ptr %0, metadata !261, metadata !DIExpression()), !dbg !263
   store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV1B, i64 0, inrange i32 0, i64 2), ptr %0, align 8, !dbg !264, !tbaa !233
   %2 = tail call i32 @puts(ptr nonnull dereferenceable(1) @str.3), !dbg !265
-  invoke preserve_mostcc void @__debase_mark_end()
-          to label %3 unwind label %4, !dbg !267
-
-3:                                                ; preds = %1
-  tail call void @_ZN1AD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #7, !dbg !268
+  notail call preserve_mostcc void @__debase_mark_end() #5, !dbg !267
+  tail call void @_ZN1AD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #5, !dbg !268
   ret void, !dbg !269
-
-4:                                                ; preds = %1
-  %5 = landingpad { ptr, i32 }
-          catch ptr null, !dbg !265
-  %6 = extractvalue { ptr, i32 } %5, 0, !dbg !265
-  tail call void @__clang_call_terminate(ptr %6) #6, !dbg !265
-  unreachable, !dbg !265
 }
 
+; Function Attrs: nounwind
 declare !dbg !270 dso_local preserve_mostcc void @__debase_mark_end() local_unnamed_addr #1
 
 ; Function Attrs: mustprogress noinline nounwind uwtable
 define dso_local void @_ZN1BD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !272 {
   tail call void @llvm.dbg.value(metadata ptr %0, metadata !274, metadata !DIExpression()), !dbg !275
-  tail call void @_ZN1BD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #7, !dbg !276
-  tail call void @_ZdlPv(ptr noundef nonnull %0) #8, !dbg !276
+  tail call void @_ZN1BD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #5, !dbg !276
+  tail call void @_ZdlPv(ptr noundef nonnull %0) #6, !dbg !276
   ret void, !dbg !277
 }
 
@@ -121,33 +87,31 @@ define dso_local void @_ZN1CD2Ev(ptr nocapture noundef nonnull writeonly align 8
   tail call void @llvm.dbg.value(metadata ptr %0, metadata !288, metadata !DIExpression()), !dbg !290
   store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV1C, i64 0, inrange i32 0, i64 2), ptr %0, align 8, !dbg !291, !tbaa !233
   %2 = tail call i32 @puts(ptr nonnull dereferenceable(1) @str.4), !dbg !292
-  tail call void @_ZN1BD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #7, !dbg !294
+  tail call void @_ZN1BD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #5, !dbg !294
   ret void, !dbg !295
 }
 
 ; Function Attrs: mustprogress noinline nounwind uwtable
 define dso_local void @_ZN1CD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !296 {
   tail call void @llvm.dbg.value(metadata ptr %0, metadata !298, metadata !DIExpression()), !dbg !299
-  tail call void @_ZN1CD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #7, !dbg !300
-  tail call void @_ZdlPv(ptr noundef nonnull %0) #8, !dbg !300
+  tail call void @_ZN1CD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) #5, !dbg !300
+  tail call void @_ZdlPv(ptr noundef nonnull %0) #6, !dbg !300
   ret void, !dbg !301
 }
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
-declare void @llvm.dbg.value(metadata, metadata, metadata) #4
+declare void @llvm.dbg.value(metadata, metadata, metadata) #3
 
 ; Function Attrs: nofree nounwind
-declare noundef i32 @puts(ptr nocapture noundef readonly) local_unnamed_addr #5
+declare noundef i32 @puts(ptr nocapture noundef readonly) local_unnamed_addr #4
 
 attributes #0 = { mustprogress noinline nounwind uwtable "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #1 = { "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #2 = { noinline noreturn nounwind uwtable "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #3 = { nobuiltin nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #4 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
-attributes #5 = { nofree nounwind }
-attributes #6 = { noreturn nounwind }
-attributes #7 = { nounwind }
-attributes #8 = { builtin nounwind }
+attributes #1 = { nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #2 = { nobuiltin nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
+attributes #3 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #4 = { nofree nounwind }
+attributes #5 = { nounwind }
+attributes #6 = { builtin nounwind }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!208, !209, !210, !211, !212, !213, !214}
@@ -423,7 +387,7 @@ attributes #8 = { builtin nounwind }
 !267 = !DILocation(line: 13, column: 2, scope: !266)
 !268 = !DILocation(line: 14, column: 1, scope: !266)
 !269 = !DILocation(line: 14, column: 1, scope: !251)
-!270 = !DISubprogram(name: "dtor_end", linkageName: "__debase_mark_end", scope: !271, file: !242, line: 73, type: !243, flags: DIFlagPrototyped, spFlags: DISPFlagOptimized)
+!270 = !DISubprogram(name: "dtor_end", linkageName: "__debase_mark_end", scope: !271, file: !242, line: 81, type: !243, flags: DIFlagPrototyped, spFlags: DISPFlagOptimized)
 !271 = !DINamespace(name: "debase", scope: null)
 !272 = distinct !DISubprogram(name: "~B", linkageName: "_ZN1BD0Ev", scope: !252, file: !1, line: 11, type: !256, scopeLine: 11, flags: DIFlagPrototyped | DIFlagAllCallsDescribed, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, declaration: !259, retainedNodes: !273)
 !273 = !{!274}

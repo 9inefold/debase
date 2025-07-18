@@ -28,10 +28,10 @@
 DEBASE_BEGIN_EXTERN_C
 
 /// Marks the start of a function body.
-DEBASE_ANNOTATION_CC void __debase_mark_begin(void);
+DEBASE_ANNOTATION_CC void __debase_mark_begin(void) DEBASE_NOEXCEPT;
 
 /// Marks the end of a function body.
-DEBASE_ANNOTATION_CC void __debase_mark_end(void);
+DEBASE_ANNOTATION_CC void __debase_mark_end(void) DEBASE_NOEXCEPT;
 
 /// Marks the start of a constructor body.
 #define __debase_ctor_begin() __debase_mark_begin()
@@ -58,27 +58,27 @@ DEBASE_END_EXTERN_C
 namespace debase {
 
 /// Marks the start of a function body.
-DEBASE_ANNOTATION_CC void mark_begin(void)
+DEBASE_ANNOTATION_CC void mark_begin(void) DEBASE_NOEXCEPT
 	__asm__("__debase_mark_begin");
 
 /// Marks the end of a function body.
-DEBASE_ANNOTATION_CC void mark_end(void)
+DEBASE_ANNOTATION_CC void mark_end(void) DEBASE_NOEXCEPT
 	__asm__("__debase_mark_end");
 
 /// Marks the start of a constructor body.
-DEBASE_ANNOTATION_CC void ctor_begin(void)
+DEBASE_ANNOTATION_CC void ctor_begin(void) DEBASE_NOEXCEPT
 	__asm__("__debase_mark_begin");
 
 /// Marks the end of a constructor body.
-DEBASE_ANNOTATION_CC void ctor_end(void)
+DEBASE_ANNOTATION_CC void ctor_end(void) DEBASE_NOEXCEPT
 	__asm__("__debase_mark_end");
 
 /// Marks the start of a destructor body. Rarely needed.
-DEBASE_ANNOTATION_CC void dtor_begin(void)
+DEBASE_ANNOTATION_CC void dtor_begin(void) DEBASE_NOEXCEPT
 	__asm__("__debase_mark_begin");
 
 /// Marks the end of a destructor body.
-DEBASE_ANNOTATION_CC void dtor_end(void)
+DEBASE_ANNOTATION_CC void dtor_end(void) DEBASE_NOEXCEPT
 	__asm__("__debase_mark_end");
 
 /// Marks that there is a continuation for this function.
