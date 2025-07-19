@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "llvm/Config/llvm-config.h"
 // Do not proliferate #includes here, require clients to #include their
 // dependencies.
 // Casting.h has complex templates that cannot be easily forward declared.
@@ -21,6 +22,14 @@
 // Add this header as a workaround to prevent `too few template arguments for
 // class template 'SmallVector'` building error with build compilers like XL.
 #include "llvm/ADT/SmallVector.h"
+
+#define LLVM_VERSION_MIN_IMPL(MAJOR, MINOR, PATCH, ...) (                     \
+  (LLVM_VERSION_MAJOR >= MAJOR) &&                                            \
+  (LLVM_VERSION_MINOR >= MINOR) &&                                            \
+  (LLVM_VERSION_PATCH >= PATCH))
+/// Check LLVM's `Major,[Minor,Patch]`.
+#define LLVM_VERSION_MIN(MAJOR, ...)                                          \
+  LLVM_VERSION_MIN_IMPL(MAJOR __VA_OPT__(,) __VA_ARGS__, 0, 0)
 
 namespace llvm {
   // ADT's.

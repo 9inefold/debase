@@ -493,6 +493,28 @@ static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification() {
   return Out;
 }
 
+#if !LLVM_VERSION_MIN(12)
+#define initializeScalarizeMaskedMemIntrinLegacyPassPass(Registry) (void(0))
+#endif
+#if !LLVM_VERSION_MIN(13)
+#define initializeReplaceWithVeclibLegacyPass(Registry) (void(0))
+#endif
+#if !LLVM_VERSION_MIN(15)
+#define initializeExpandLargeDivRemLegacyPassPass(Registry) (void(0))
+#define initializeJMCInstrumenterPass(Registry) (void(0))
+#define initializeSelectOptimizePass(Registry) (void(0))
+#endif
+#if !LLVM_VERSION_MIN(17)
+#define initializeCallBrPreparePass(Registry) (void(0))
+#endif
+#if !LLVM_VERSION_MIN(19)
+#define initializeAtomicExpandLegacyPass(Registry) (void(0))
+#define initializePostInlineEntryExitInstrumenterPass(Registry) (void(0))
+#endif
+#if !LLVM_VERSION_MIN(21)
+#define initializeExpandFpLegacyPassPass(Registry) (void(0))
+#endif
+
 static void LLVMInitializeEverything() {
   InitializeAllTargetInfos();
   InitializeAllTargets();
@@ -516,13 +538,13 @@ static void LLVMInitializeEverything() {
   // For codegen passes, only passes that do IR to IR transformation are
   // supported.
   initializeExpandLargeDivRemLegacyPassPass(Registry);
-  //initializeExpandFpLegacyPassPass(Registry);
+  initializeExpandFpLegacyPassPass(Registry);
   initializeExpandMemCmpLegacyPassPass(Registry);
   initializeScalarizeMaskedMemIntrinLegacyPassPass(Registry);
   initializeSelectOptimizePass(Registry);
   initializeCallBrPreparePass(Registry);
   initializeCodeGenPrepareLegacyPassPass(Registry);
-  //initializeAtomicExpandLegacyPass(Registry);
+  initializeAtomicExpandLegacyPass(Registry);
   initializeWinEHPreparePass(Registry);
   initializeDwarfEHPrepareLegacyPassPass(Registry);
   initializeSafeStackLegacyPassPass(Registry);
@@ -532,7 +554,7 @@ static void LLVMInitializeEverything() {
   initializeIndirectBrExpandLegacyPassPass(Registry);
   initializeInterleavedLoadCombinePass(Registry);
   initializeInterleavedAccessPass(Registry);
-  //initializePostInlineEntryExitInstrumenterPass(Registry);
+  initializePostInlineEntryExitInstrumenterPass(Registry);
   initializeUnreachableBlockElimLegacyPassPass(Registry);
   initializeExpandReductionsPass(Registry);
   initializeWasmEHPreparePass(Registry);
