@@ -34,12 +34,24 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
+// Target related
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/CodeGen/CommandFlags.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/TargetParser/Host.h"
 #include "llvm/TargetParser/SubtargetFeature.h"
 #include "llvm/TargetParser/Triple.h"
+// Transforms
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/IR/DebugInfo.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Utils/Debugify.h"
+// Miscellaneous
 #include <debase/Config.hpp>
 #include <memory>
 #include <optional>
@@ -55,6 +67,8 @@
 using namespace llvm;
 using namespace debase_tool;
 
+static codegen::RegisterCodeGenFlags CFG;
+
 bool debase_tool::Strict = false;
 bool debase_tool::Permissive = false;
 
@@ -69,14 +83,14 @@ cl::OptionCategory debase_tool::DebaseToolCategory("Debaser Options");
 namespace debase_tool {
 
 static cl::list<std::string>
-InputFilenames(cl::Positional, cl::OneOrMore,
+InputFilenames(cl::Positional,
                cl::desc("<input file>"),
                cl::cat(DebaseToolCategory));
 
 static cl::opt<std::string>
-OutputFilename("o",
-               cl::desc("Output filename"), cl::value_desc("filename"),
-               cl::init("-"), cl::cat(DebaseToolCategory));
+OutputFilepath("o",
+               cl::desc("Output folder"), cl::value_desc("folder"),
+               cl::cat(DebaseToolCategory));
 
 static cl::opt<HardeningMode>
 Hardening(
@@ -99,21 +113,83 @@ Hardening(
 
 cl::opt<bool>
 Verbose("verbose",
-        cl::desc("Output more runtime information."),
+        cl::desc("Output more runtime information"),
         cl::init(false), cl::cat(DebaseToolCategory));
 
 static cl::alias
 VerboseA("V",
-        cl::desc("Alias for '-verbose'."),
+        cl::desc("Alias for '-verbose'"),
         cl::aliasopt(Verbose),
         cl::cat(DebaseToolCategory));
 
 static cl::opt<bool>
 DumpModule("dump-module", cl::Hidden,
-           cl::desc("Dump the module once finished."),
+           cl::desc("Dump the module once finished"),
            cl::init(false), cl::cat(DebaseToolCategory));
 
+// The following options were taken from llvm opt:
+static cl::OptionCategory& OptToolCategory = DebaseToolCategory;
+
+// Always enabled!
+static constexpr bool OutputAssembly = true;
+
+static cl::opt<bool>
+PrintPasses("print-passes",
+            cl::desc("Print available passes and exit"),
+            cl::cat(OptToolCategory));
+
+static cl::opt<bool>
+StripDebug("strip-debug",
+           cl::desc("Strip debugger symbol info from translation unit"),
+           cl::cat(OptToolCategory));
+
+static cl::opt<bool>
+StripNamedMetadata("strip-named-metadata",
+                   cl::desc("Strip module-level named metadata"),
+                   cl::cat(OptToolCategory));
+
+static cl::opt<std::string>
+TargetTriple("mtriple",
+             cl::desc("Override target triple for module"),
+             cl::cat(OptToolCategory));
+
+static cl::opt<bool>
+NoOutput("disable-output", cl::Hidden,
+         cl::desc("Do not write result bitcode file"),
+         cl::cat(OptToolCategory));
+
+static cl::opt<bool>
+NoVerify("disable-verify", cl::Hidden,
+         cl::desc("Do not run the verifier"),
+         cl::cat(OptToolCategory));
+
+static cl::opt<bool>
+VerifyDebugInfoPreserve(
+  "verify-debuginfo-preserve",
+  cl::desc("Start the pipeline with collecting and end it with checking of "
+           "debug info preservation."),
+  cl::cat(OptToolCategory));
+
+static cl::opt<bool>
+VerifyEach("verify-each",
+           cl::desc("Verify after each transform"),
+           cl::cat(OptToolCategory));
+
+static cl::opt<std::string>
+ClDataLayout("data-layout",
+             cl::desc("data layout string to use"),
+             cl::value_desc("layout-string"),
+             cl::init(""), cl::cat(OptToolCategory));
+
+static cl::opt<bool>
+RunTwice("run-twice", cl::Hidden,
+         cl::desc("Run all passes twice, re-using the same pass manager."),
+         cl::init(false), cl::cat(OptToolCategory));
+
 } // namespace debase_tool
+
+////////////////////////////////////////////////////////////////////////////////
+// Startup/Utility Functions
 
 [[noreturn]] static void exitWithError(Twine Msg, std::string Hint = "") {
   errs() << raw_ostream::RED << Msg 
@@ -124,13 +200,43 @@ DumpModule("dump-module", cl::Hidden,
   std::exit(1);
 }
 
-static void FixupFilename(std::string& InFilename) {
+static void exitOrLogWithError(Twine Msg, std::string Hint = "") {
+  if (!Permissive)
+    return exitWithError(Msg, std::move(Hint));
+  // Permissive, continue!
+  errs() << raw_ostream::RED << Msg 
+    << "\n" << raw_ostream::RESET;
+  if (!Hint.empty())
+    WithColor::note() << Hint << "\n";
+}
+
+template <typename DefaultT>
+static decltype(auto) exitOrReturnDefault(DefaultT&& Default,
+                                          Twine Msg, std::string Hint = "") {
+  exitOrLogWithError(Msg, std::move(Hint));
+  return std::forward<DefaultT>(Default);
+}
+template <typename DefaultT>
+static decltype(auto) exitOrReturnDefault(DefaultT&& Default) {
+  if (!Permissive)
+    return std::exit(1);
+  return std::forward<DefaultT>(Default);
+}
+
+static bool FixupFilename(std::string& InFilename) {
   SmallString<128> Filename{StringRef(InFilename)};
-  if (auto EC = sys::fs::make_absolute(Filename))
-    exitWithError(EC.message());
-  if (!sys::fs::exists(Filename))
-    exitWithError(Twine("'") + Filename.str() + "' does not exist!");
+  if (auto EC = sys::fs::make_absolute(Filename)) {
+    exitOrLogWithError(EC.message());
+    InFilename.clear();
+    return false;
+  }
+  if (!sys::fs::exists(Filename)) {
+    exitOrLogWithError(Twine("'") + Filename.str() + "' does not exist!");
+    InFilename.clear();
+    return false;
+  }
   InFilename = static_cast<std::string>(Filename);
+  return true;
 }
 
 static bool OptionIsHidden(cl::Option& Opt) {
@@ -162,65 +268,45 @@ static void SemiHideUnrelatedOptions(
   }
 }
 
-static bool ParseCLArgs(int argc, char* const* argv) {
-  SemiHideUnrelatedOptions(DebaseToolCategory);
-  cl::AddExtraVersionPrinter([](raw_ostream& OS) {
-    OS << DEBASE_VENDOR_NAME  << ":\n  ";
-    OS << DEBASE_PACKAGE_NAME << " version "
-       << DEBASE_PACKAGE_VERSION << "\n  ";
-#ifdef NDEBUG
-    OS << "Optimized build";
-#else
-    OS << "Debug build";
-#endif
-    OS << ".\n";
-  });
-  return cl::ParseCommandLineOptions(argc, argv,
-    "debaser compile pass\n", &errs());
+static raw_ostream& vbss() {
+  return *(Verbose ? &errs() : &nulls());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// LLVM Related Functions
+
+/// On some versions `Module::setTargetTriple` takes a `StringRef`, on others
+/// it takes... a `Triple`. This utility helps keep things smooth.
+class SetTargetTripleCtorCast {
+  std::string Data;
+public:
+  SetTargetTripleCtorCast(StringRef Unnormalized) : 
+    Data(Triple::normalize(Unnormalized)) {}
+  SetTargetTripleCtorCast(const std::string& Unnormalized) :
+    SetTargetTripleCtorCast(StringRef(Unnormalized)) {}
+  
+  operator StringRef() const { return StringRef(Data); }
+  operator Triple() const { return Triple(Data); }
+};
 
 /// Initializes literally everything. Might be able to pull back a bit...
 static void LLVMInitializeEverything();
-
+/// Gets the OptLevel of `-O1`.
+static CodeGenOptLevel GetCodeGenOptLevel() { return CodeGenOptLevel::Less; } 
 /// Gets some basic passes we can run on functions.
 static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification();
 
-static int DebaseModules(ArrayRef<std::string> Filenames,
-                         ArrayRef<std::string> Unlinks,
-                         char** argv, LLVMContext& Context);
-
-static constexpr StringRef ExampleUnlinks[] {
-  "A", "B", "C",
-  //"D<*>",
-  //"\"e::*\""
-};
-
-int main(int argc, char** argv) {
-  InitLLVM X(argc, argv);
-  LLVMInitializeEverything();
-
-  if (!ParseCLArgs(argc, argv))
-    exitWithError("Failed to parse commandline arguments!");
-  if (Strict && Permissive)
-    exitWithError("'-strict' and '-permissive' cannot be used together!");
-  // Make any paths absolute.
-  for (auto& Filename : InputFilenames)
-     FixupFilename(Filename);
-  
-  std::vector<std::string> StrUnlinks(
-    std::begin(ExampleUnlinks), std::end(ExampleUnlinks));
-  
-  LLVMContext Context;
-  return DebaseModules(
-    InputFilenames, StrUnlinks,
-    argv, Context
-  );
+static bool LoadUnlinks(SmallVectorImpl<std::string>& Unlinks) {
+  static constexpr StringRef ExampleUnlinks[] {
+    "A", "B", "C",
+    //"D<*>",
+    //"\"e::*\""
+  };
+  // TODO: Load unlinks from a file...
+  constexpr std::size_t N = std::size(ExampleUnlinks);
+  Unlinks.append(ExampleUnlinks, ExampleUnlinks + N);
+  return true;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// Debaser
 
 namespace {
 
@@ -233,8 +319,12 @@ class DeBaser {
   /// The commandline (for diagnostics).
   char* const* Argv = nullptr;
 
+  /// Stores all the attribute data from our matched functions so they can be
+  /// restored later. This allows for passes which would otherwise be harder
+  /// to deal with.
   struct PrevFunctionInfo {
     bool HadNoinline : 1 = false;
+    bool HadAlwaysinline : 1 = false;
     //bool HadUsed : 1 = false;
   };
 
@@ -247,7 +337,11 @@ class DeBaser {
   Function* BI__debase_mark_end = nullptr;
   Function* BI__debase_continuation = nullptr;
 
-  unsigned EncounteredSimples = 0;
+  /// The number of simple references encountered.
+  unsigned EncounteredSimple = 0;
+  /// The number of complex references encountered.
+  /// Unlike `EncounteredSimple`, this can vary.
+  unsigned EncounteredComplex = 0;
 
   bool LoadedModule : 1 = false;
   bool SetUnlinks : 1 = false;
@@ -267,9 +361,7 @@ public:
     std::optional<DeBaser> New(StringRef Filename) {
       std::optional<DeBaser> DB;
       DB.emplace(Filename, Refs, Argv, Context);
-      if (!DB->LoadedModule
-       || !DB->SetUnlinks
-       || !DB->LastCheck) {
+      if (!DB->LoadedModule || !DB->SetUnlinks || !DB->LastCheck) {
         // Unfortunately, we have failed... Return nothing.
         return std::nullopt;
       }
@@ -314,37 +406,295 @@ public:
     }
   }
 
-private:
-  static PrevFunctionInfo GetInfoAndUpdate(Function* F);
-
-  bool loadModule(StringRef Filename, LLVMContext& Context) {
-    if (LoadedModule) {
-      if (Filename == M->getName())
-        return true;
-      error() << "Module for '" << Filename
-        << "' has already been loaded as '" << M->getName() << "'!\n";
-      return false;
-    }
-
-    M = parseIRFile(Filename, Err, Context);
-    if (!M) {
-      Err.print(Argv[0], error());
-      return false;
-    }
-
-    assert(Filename == M->getName());
-    this->LoadedModule = true;
-    return true;
-  }
-
-  bool loadAndUpdateRefsFromModule();
-
   raw_ostream& error() {
     return WithColor::error(errs(), Argv[0]);
   }
+
+private:
+  /// Loads a `Module` from the specified file into `DeBaser::M`.
+  bool loadModule(StringRef Filename, LLVMContext& Context);
+
+  /// Gets a `PrevFunctionInfo` while updating the function.
+  static PrevFunctionInfo GetInfoAndUpdate(Function* F);
+  /// Loads references matching the provided list, updating their attributes.
+  bool loadAndUpdateRefsFromModule();
 };
 
 } // namespace `anonymous`
+
+int main(int Argc, char** Argv) {
+  InitLLVM X(Argc, Argv);
+  LLVMInitializeEverything();
+
+  // Hide opt options from -help, but still allow the user to query them.
+  SemiHideUnrelatedOptions(DebaseToolCategory);
+
+  // Register the Target and CPU printer for --version.
+  cl::AddExtraVersionPrinter(&sys::printDefaultTargetAndDetectedCPU);
+  // Get the debaser version printer.
+  cl::AddExtraVersionPrinter([](raw_ostream& OS) {
+    OS << DEBASE_VENDOR_NAME << ":\n  "
+       << DEBASE_PACKAGE_NAME << " version "
+       << DEBASE_PACKAGE_VERSION << "\n";
+  });
+
+  cl::ParseCommandLineOptions(Argc, Argv,
+    "llvmir pass that removes calls to bases in ctors/dtors.\n");
+  
+  LLVMContext Context;
+
+  if (PrintPasses) {
+    PassBuilder PB;
+    PB.printPassNames(outs());
+    return 0;
+  }
+
+  if (InputFilenames.empty()) {
+    WithColor::error(errs(), Argv[0])
+      << "No input files provided!";
+    return 1;
+  }
+
+  // TODO: Unique filenames.
+  SmallVector<StringRef, 1> ValidFilenames;
+  for (auto& Filename : InputFilenames)
+    if (FixupFilename(Filename))
+      ValidFilenames.emplace_back(Filename);
+
+  if (ValidFilenames.empty()) {
+    WithColor::error(errs(), Argv[0])
+      << "No valid input files were provided!";
+    return 1;
+  }
+
+  SMDiagnostic Err;
+  auto WriteSMErrToString = [&Err, Argv](bool UseColors = true) {
+    std::string Str; raw_string_ostream OS(Str);
+    Err.print(Argv[0], OS, UseColors);
+    return Str;
+  };
+
+  // The following were copied from llvm/tools/opt/optdriver.cpp
+  //
+  auto SetDataLayout = [&](StringRef IRTriple,
+                           StringRef IRLayout) -> std::optional<std::string> {
+    // Data layout specified on the command line has the highest priority.
+    if (!ClDataLayout.empty())
+      return ClDataLayout;
+    // If an explicit data layout is already defined in the IR, don't infer.
+    if (!IRLayout.empty())
+      return std::nullopt;
+
+    // If an explicit triple was specified (either in the IR or on the
+    // command line), use that to infer the default data layout. However, the
+    // command line target triple should override the IR file target triple.
+    std::string TripleStr =
+        TargetTriple.empty() ? IRTriple.str() : Triple::normalize(TargetTriple);
+    // If the triple string is still empty, we don't fall back to
+    // sys::getDefaultTargetTriple() since we do not want to have differing
+    // behaviour dependent on the configured default triple. Therefore, if the
+    // user did not pass -mtriple or define an explicit triple/datalayout in
+    // the IR, we should default to an empty (default) DataLayout.
+    if (TripleStr.empty())
+      return std::nullopt;
+    // Otherwise we infer the DataLayout from the target machine.
+    Expected<std::unique_ptr<TargetMachine>> ExpectedTM =
+        codegen::createTargetMachineForTriple(
+          TripleStr, GetCodeGenOptLevel());
+    if (!ExpectedTM) {
+      WithColor::warning(errs(), Argv[0])
+        << "failed to infer data layout: "
+        << toString(ExpectedTM.takeError()) << "\n";
+      return std::nullopt;
+    }
+    return (*ExpectedTM)->createDataLayout().getStringRepresentation();
+  };
+  // The pointer holding all the Modules output files.
+  std::unique_ptr<ToolOutputFile> Out;
+  auto LoadToolOutputFile = [&](StringRef Filename) -> Error {
+    using namespace std::literals;
+    SmallString<128> Path;
+    // Default to standard output.
+    if (OutputFilepath.empty())
+      Path.append(sys::path::parent_path(Filename));
+    else
+      Path.append(OutputFilepath);
+    if (!Filename.consume_back(".ll"))
+      return MakeError("Invalid filename"s + Filename.str());
+    StringRef Stem = sys::path::filename(Filename);
+    sys::path::append(Path, Twine(Stem) + ".out.ll");
+
+    std::error_code EC;
+    sys::fs::OpenFlags Flags =
+        OutputAssembly ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None;
+    Out.reset(new ToolOutputFile(Path.str(), EC, Flags));
+    if (EC)
+      return errorCodeToError(EC);
+    // Boss.
+    return Error::success();
+  };
+
+  Triple LastModuleTriple;
+  std::unique_ptr<TargetMachine> TM;
+  std::optional<TargetLibraryInfoImpl> TLII;
+  auto LoadModuleFromFile =
+      [&, Argv](StringRef Filename) -> Expected<std::unique_ptr<Module>> {
+    // ...
+    std::unique_ptr<Module> M
+      = parseIRFile(Filename, Err, Context,
+                    ParserCallbacks(SetDataLayout));
+    if (!M)
+      return MakeError(
+        WriteSMErrToString());
+    
+    // Strip debug info before running the verifier.
+    if (StripDebug)
+      StripDebugInfo(*M);
+
+    // Erase module-level named metadata, if requested.
+    if (StripNamedMetadata) {
+      while (!M->named_metadata_empty()) {
+        NamedMDNode* NMD = &*M->named_metadata_begin();
+        M->eraseNamedMetadata(NMD);
+      }
+    }
+
+    // If we are supposed to override the target triple, do so now.
+    if (!TargetTriple.empty()) {
+      SetTargetTripleCtorCast TT(TargetTriple);
+      M->setTargetTriple(Triple::normalize(TargetTriple));
+    }
+    
+    // Immediately run the verifier to catch any problems before starting up the
+    // pass pipelines. Otherwise we can crash on broken code during
+    // doInitialization().
+    if (!NoVerify && verifyModule(*M, &errs())) {
+      std::string Out; raw_string_ostream(Out)
+        << Argv[0] << ": " << Filename
+        << ": error: input module is broken!\n";
+      return MakeError(std::move(Out));
+    }
+
+    if (NoOutput) {
+      if (!OutputFilepath.empty())
+        errs() << "WARNING: The -o (output path) option is ignored when\n"
+                  "the -disable-output option is used.\n";
+    } else {
+      if (Error E = LoadToolOutputFile(Filename))
+        return E;
+    }
+
+    Triple ModuleTriple(M->getTargetTriple());
+    const bool SameTriple = 
+      (LastModuleTriple == ModuleTriple);
+    std::string CPUStr, FeaturesStr;
+    if (!SameTriple) {
+      // Only reinitialize when triple differs.
+      if (ModuleTriple.getArch()) {
+        auto* volatile GetMCPU = &codegen::getMCPU;
+        std::string XCPU = (*GetMCPU)();
+        CPUStr = codegen::getCPUStr();
+        FeaturesStr = codegen::getFeaturesStr();
+        Expected<std::unique_ptr<TargetMachine>> ExpectedTM =
+            codegen::createTargetMachineForTriple(ModuleTriple.str(),
+                                                  GetCodeGenOptLevel());
+        if (auto E = ExpectedTM.takeError()) {
+          errs() << Argv[0] << ": WARNING: failed to create target machine for '"
+                 << ModuleTriple.str() << "': " << toString(std::move(E)) << "\n";
+          TM.reset();
+        } else {
+          TM = std::move(*ExpectedTM);
+        }
+      } else if (ModuleTriple.getArchName() != "unknown" &&
+                 ModuleTriple.getArchName() != "") {
+        std::string Out; raw_string_ostream(Out)
+          << Argv[0] << ": unrecognized architecture '"
+          << ModuleTriple.getArchName() << "' provided.\n";
+        return MakeError(std::move(Out));
+      }
+    }
+
+    // Override function attributes based on CPUStr, FeaturesStr, and command
+    // line flags.
+    codegen::setFunctionAttributes(CPUStr, FeaturesStr, *M);
+
+    if (!SameTriple) {
+      TLII.emplace(ModuleTriple);
+      LastModuleTriple = std::move(ModuleTriple);
+    }
+
+    WithColor::note(vbss())
+      << "Successfully loaded '" << Filename << "'!\n";
+    return M;
+  };
+
+  // TODO: Load unlinks from a file...
+  SmallVector<std::string, 8> ExampleUnlinks;
+  LoadUnlinks(ExampleUnlinks);
+  // Compile the references...
+  UnlinkRefs Refs(ExampleUnlinks);
+  if (Refs.didFail()) {
+    WithColor::error(errs(), Argv[0])
+      << "Failed generating unlink references!";
+    return 1;
+  }
+
+  Expected<std::unique_ptr<Module>> FirstModuleOrError = 
+    LoadModuleFromFile(ValidFilenames.front());
+  if (Error E = FirstModuleOrError.takeError()) {
+    errs() << toString(std::move(E)) << '\n';
+    if (!Permissive)
+      return 1;
+    if (!TLII.has_value())
+      return 1;
+  }
+
+  DebugifyCustomPassManager Passes;
+  Passes.add(new TargetLibraryInfoWrapperPass(*TLII));
+
+  // Add internal analysis passes from the target machine.
+  Passes.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis()
+                                                     : TargetIRAnalysis()));
+
+  if (TM) {
+    auto& LTM = static_cast<LLVMTargetMachine&>(*TM);
+    Pass* TPC = LTM.createPassConfig(Passes);
+    Passes.add(TPC);
+  }
+
+  // Get the passes to be run before analysis.
+  auto O1OptPasses = GetO1PassesRequiredForSimplification();
+
+  DeBaser::Factory DBFactory(Refs, Argv, Context);
+  for (StringRef Filename : ValidFilenames) {
+    if (Filename.empty())
+      continue;
+
+    Expected<std::unique_ptr<Module>> ModuleOrError
+      = LoadModuleFromFile(Filename);
+    if (Error E = ModuleOrError.takeError()) {
+      errs() << toString(std::move(E)) << '\n';
+      if (Permissive)
+        continue;
+      return 1;
+    }
+
+#if 0
+    auto DB = DBFactory.New(Filename);
+    if (!DB.has_value()) {
+      if (!Permissive)
+        return 1;
+      WithColor::warning(errs(), Argv[0])
+        << "Failed to generate module for '"
+        << Filename << "'.\n";
+      continue;
+    }
+#endif
+    //DB->runPasses(O1OptPasses);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 DeBaser::DeBaser(StringRef Filename, UnlinkRefs& Refs,
                  char* const* Argv, LLVMContext& Context)
@@ -360,16 +710,37 @@ DeBaser::DeBaser(StringRef Filename, UnlinkRefs& Refs,
   BI__debase_continuation = M->getFunction("__debase_continuation");
 }
 
+bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
+  if (LoadedModule) {
+    if (Filename == M->getName())
+      return true;
+    error() << "Module for '" << Filename
+      << "' has already been loaded as '" << M->getName() << "'!\n";
+    return false;
+  }
+
+  M = parseIRFile(Filename, Err, Context);
+  if (!M) {
+    Err.print(Argv[0], error());
+    return false;
+  }
+
+  assert(Filename == M->getName());
+  this->LoadedModule = true;
+  return true;
+}
+
 #define SetInfoWithAttrKind(MEMBER, KIND) do {                                \
   Info.MEMBER = F->hasFnAttribute(KIND);                                      \
-  if (!Info.MEMBER)                                                            \
-    F->addFnAttr(KIND);                                                        \
+  if (!Info.MEMBER)                                                           \
+    F->addFnAttr(KIND);                                                       \
 } while(0)
 
 DeBaser::PrevFunctionInfo DeBaser::GetInfoAndUpdate(Function* F) {
   using AttrKind = Attribute::AttrKind;
   PrevFunctionInfo Info {};
   SetInfoWithAttrKind(HadNoinline, AttrKind::NoInline);
+  // SetInfoWithAttrKind(Info.HadAlwaysinline, AttrKind::AlwaysInline);
   // SetInfoWithAttrKind(HadUsed, AttrKind::Used?);
   return Info;
 }
@@ -379,7 +750,7 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
     if (!Refs.match(F.getName()))
       continue;
     // TODO: Switch when complex added.
-    ++EncounteredSimples;
+    ++EncounteredSimple;
 
     auto [It, DidEmplace] = LocatedRefs.try_emplace(&F);
     if (LLVM_UNLIKELY(!DidEmplace)) {
@@ -398,85 +769,16 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
     }
   }
 
-  if (Strict && EncounteredSimples != Refs.simpleCount()) {
+  if (Strict && EncounteredSimple != Refs.simpleCount()) {
     error()
       << "In '-strict' all simple definitions are required to be encountered. Only "
-      << EncounteredSimples << " were encountered, when "
+      << EncounteredSimple << " were encountered, when "
       << Refs.simpleCount() << " were required.\n";
     return false;
   }
 
   this->SetUnlinks = true;
   return true;
-}
-
-static int DebaseModules(ArrayRef<std::string> Filenames,
-                         ArrayRef<std::string> Unlinks,
-                         char** Argv, LLVMContext& Context) {
-  // ...
-  if (Filenames.empty()) {
-    WithColor::error(errs(), Argv[0])
-      << "No input files provided!";
-    return 1;
-  }
-
-  UnlinkRefs Refs(Unlinks);
-  if (Refs.didFail()) {
-    WithColor::error(errs(), Argv[0])
-      << "Failed generating unlink references!";
-    return 1;
-  }
-
-  DeBaser::Factory DBFactory(Refs, Argv, Context);
-  auto O1OptPasses = GetO1PassesRequiredForSimplification();
-  for (StringRef Filename : Filenames) {
-    auto DB = DBFactory.New(Filename);
-    if (!DB.has_value()) {
-      if (!Permissive)
-        return 1;
-      WithColor::warning(errs(), Argv[0])
-        << "Failed to generate module '"
-        << Filename << "'.\n";
-      continue;
-    }
-    
-    //DB->runPasses(O1OptPasses);
-  }
-
-  return 0;
-}
-
-static int DebaseModule(StringRef Filename, char** argv, LLVMContext& Context) {
-  // Load the module to be compiled...
-  std::unique_ptr<Module> M;
-  SMDiagnostic Err;
-
-  // TODO: Do other stuff later...
-
-  M = parseIRFile(Filename, Err, Context);
-  if (!M) {
-    Err.print(argv[0],
-      WithColor::error(errs(), argv[0]));
-    return 1;
-  }
-  outs() << "Loaded '" << M->getName() << "')!\n";
-  
-  const Function* MarkBegin = M->getFunction("__debase_mark_begin");
-  const Function* MarkEnd = M->getFunction("__debase_mark_end");
-
-  if (Verbose) {
-    if (MarkBegin)
-      outs() << "Found '__debase_mark_begin'!\n";
-    if (MarkEnd)
-      outs() << "Found '__debase_mark_end'!\n";
-  }
-
-  if (DumpModule && 0)
-    M->dump();
-  
-  // TODO: Figure out this fault (probably a debug/release thing...)
-  DbgBuryPointer(std::move(M));
-  return 0;
 }
 
 static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification() {

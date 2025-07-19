@@ -258,7 +258,7 @@ class DeBaser {
   Function* BI__debase_mark_end = nullptr;
   Function* BI__debase_continuation = nullptr;
 
-  unsigned EncounteredSimples = 0;
+  unsigned EncounteredSimple = 0;
 
   bool LoadedModule : 1 = false;
   bool SetUnlinks : 1 = false;
@@ -390,7 +390,7 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
     if (!Refs.match(F.getName()))
       continue;
     // TODO: Switch when complex added.
-    ++EncounteredSimples;
+    ++EncounteredSimple;
 
     auto [It, DidEmplace] = LocatedRefs.try_emplace(&F);
     if (LLVM_UNLIKELY(!DidEmplace)) {
@@ -409,10 +409,10 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
     }
   }
 
-  if (Strict && EncounteredSimples != Refs.simpleCount()) {
+  if (Strict && EncounteredSimple != Refs.simpleCount()) {
     error()
       << "In '-strict' all simple definitions are required to be encountered. Only "
-      << EncounteredSimples << " were encountered, when "
+      << EncounteredSimple << " were encountered, when "
       << Refs.simpleCount() << " were required.\n";
     return false;
   }
