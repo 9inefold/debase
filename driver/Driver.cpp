@@ -591,8 +591,6 @@ int main(int Argc, char** Argv) {
     if (!SameTriple) {
       // Only reinitialize when triple differs.
       if (ModuleTriple.getArch()) {
-        auto* volatile GetMCPU = &codegen::getMCPU;
-        std::string XCPU = (*GetMCPU)();
         CPUStr = codegen::getCPUStr();
         FeaturesStr = codegen::getFeaturesStr();
         Expected<std::unique_ptr<TargetMachine>> ExpectedTM =
