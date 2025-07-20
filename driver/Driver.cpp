@@ -17,6 +17,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Shared.hpp"
+#include "UniqueStringVector.hpp"
 #include "UnlinkRefs.hpp"
 #include "llvm/InitializePasses.h"
 #include "llvm/PassRegistry.h"
@@ -289,6 +290,28 @@ public:
   operator Triple() const { return Triple(Data); }
 };
 
+/// Info that stays the same with every triple.
+struct CachedTargetInfo {
+  std::unique_ptr<TargetMachine> TM = nullptr;
+  TargetLibraryInfoImpl TLII;
+  DebugifyCustomPassManager Passes;
+public:
+  CachedTargetInfo(const Triple& TT,
+                   std::unique_ptr<TargetMachine> InTM)
+   : TM(std::move(InTM)), TLII(TT) {
+    //// Add TLII Pass.
+    //Passes.add(new TargetLibraryInfoWrapperPass(TLII));
+    //// Add internal analysis passes from the target machine.
+    //Passes.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis()
+    //                                                   : TargetIRAnalysis()));
+    //if (TM) {
+    //  // FIXME: We should dyn_cast this when supported.
+    //  auto& LTM = static_cast<LLVMTargetMachine&>(*TM);
+    //  Passes.add(LTM.createPassConfig(Passes));
+    //}
+  }
+};
+
 /// Initializes literally everything. Might be able to pull back a bit...
 static void LLVMInitializeEverything();
 /// Gets the OptLevel of `-O1`.
@@ -455,12 +478,29 @@ int main(int Argc, char** Argv) {
     return 1;
   }
 
-  // TODO: Unique filenames.
-  SmallVector<StringRef, 1> ValidFilenames;
-  for (auto& Filename : InputFilenames)
-    if (FixupFilename(Filename))
-      ValidFilenames.emplace_back(Filename);
+  if (NoOutput && !OutputFilepath.empty()) {
+    errs() << "WARNING: The -o (output path) option is ignored when the "
+              "-disable-output option is used.\n";
+  }
 
+  // TODO: Unique filenames.
+  UniqueStringVector ValidFilenames;
+  for (auto& Filename : InputFilenames) {
+    if (FixupFilename(Filename)) {
+      auto [_, DidInsert] = ValidFilenames.try_insert(Filename);
+      if (DidInsert)
+        continue;
+      WithColor::warning(errs(), Argv[0])
+        << "Duplicate filename '" << Filename << "'.\n";
+      if (Strict)
+        return 1;
+    } else {
+      WithColor::error(errs(), Argv[0])
+        << "Invalid filename '" << Filename << "'.\n";
+      if (Strict)
+        return 1;
+    }
+  }
   if (ValidFilenames.empty()) {
     WithColor::error(errs(), Argv[0])
       << "No valid input files were provided!";
@@ -534,9 +574,50 @@ int main(int Argc, char** Argv) {
     return Error::success();
   };
 
-  Triple LastModuleTriple;
-  std::unique_ptr<TargetMachine> TM;
-  std::optional<TargetLibraryInfoImpl> TLII;
+  StringMap<std::optional<CachedTargetInfo>> TargetInfoCache;
+  auto LoadTargetInfoCacheEntry = [&TargetInfoCache, Argv] (Module* M) -> Error {
+    Triple ModuleTriple(M->getTargetTriple());
+    auto ModuleTripleError = [&]() -> Error {
+      std::string Out; raw_string_ostream(Out)
+        << Argv[0] << ": unrecognized architecture '"
+        << ModuleTriple.getArchName() << "' provided.\n";
+      return MakeError(std::move(Out));
+    };
+    auto It = TargetInfoCache.find(ModuleTriple.str());
+    if (It != TargetInfoCache.end()) {
+      if (!It->second)
+        // Found an error previously...
+        return ModuleTripleError();
+      return Error::success();
+    }
+    
+    // Handle generating target info.
+    std::unique_ptr<TargetMachine> TM = nullptr;
+    if (ModuleTriple.getArch()) {
+      Expected<std::unique_ptr<TargetMachine>> ExpectedTM =
+          codegen::createTargetMachineForTriple(ModuleTriple.str(),
+                                                GetCodeGenOptLevel());
+      if (auto E = ExpectedTM.takeError()) {
+        WithColor::warning(errs(), Argv[0])
+          << "failed to create target machine for '"
+          << ModuleTriple.str() << "': "
+          << toString(std::move(E)) << "\n";
+        TM.reset();
+      } else {
+        TM = std::move(*ExpectedTM);
+      }
+    } else if (ModuleTriple.getArchName() != "unknown" &&
+               ModuleTriple.getArchName() != "") {
+      return ModuleTripleError();
+    }
+    
+    bool DidEmplace = false;
+    std::tie(It, DidEmplace) = TargetInfoCache
+        .try_emplace(ModuleTriple.str(), std::in_place,
+                     ModuleTriple, std::move(TM));
+    CachedTargetInfo& CTI = *It->second;
+    return Error::success();
+  };
   auto LoadModuleFromFile =
       [&, Argv](StringRef Filename) -> Expected<std::unique_ptr<Module>> {
     // ...
@@ -562,7 +643,7 @@ int main(int Argc, char** Argv) {
     // If we are supposed to override the target triple, do so now.
     if (!TargetTriple.empty()) {
       SetTargetTripleCtorCast TT(TargetTriple);
-      M->setTargetTriple(Triple::normalize(TargetTriple));
+      M->setTargetTriple(TT);
     }
     
     // Immediately run the verifier to catch any problems before starting up the
@@ -575,51 +656,19 @@ int main(int Argc, char** Argv) {
       return MakeError(std::move(Out));
     }
 
-    if (NoOutput) {
-      if (!OutputFilepath.empty())
-        errs() << "WARNING: The -o (output path) option is ignored when\n"
-                  "the -disable-output option is used.\n";
-    } else {
+    if (!NoOutput) {
       if (Error E = LoadToolOutputFile(Filename))
         return E;
     }
 
-    Triple ModuleTriple(M->getTargetTriple());
-    const bool SameTriple = 
-      (LastModuleTriple == ModuleTriple);
-    std::string CPUStr, FeaturesStr;
-    if (!SameTriple) {
-      // Only reinitialize when triple differs.
-      if (ModuleTriple.getArch()) {
-        CPUStr = codegen::getCPUStr();
-        FeaturesStr = codegen::getFeaturesStr();
-        Expected<std::unique_ptr<TargetMachine>> ExpectedTM =
-            codegen::createTargetMachineForTriple(ModuleTriple.str(),
-                                                  GetCodeGenOptLevel());
-        if (auto E = ExpectedTM.takeError()) {
-          errs() << Argv[0] << ": WARNING: failed to create target machine for '"
-                 << ModuleTriple.str() << "': " << toString(std::move(E)) << "\n";
-          TM.reset();
-        } else {
-          TM = std::move(*ExpectedTM);
-        }
-      } else if (ModuleTriple.getArchName() != "unknown" &&
-                 ModuleTriple.getArchName() != "") {
-        std::string Out; raw_string_ostream(Out)
-          << Argv[0] << ": unrecognized architecture '"
-          << ModuleTriple.getArchName() << "' provided.\n";
-        return MakeError(std::move(Out));
-      }
-    }
-
+    if (Error E = LoadTargetInfoCacheEntry(&*M))
+      return std::move(E);
+    
     // Override function attributes based on CPUStr, FeaturesStr, and command
     // line flags.
+    std::string CPUStr = codegen::getCPUStr();
+    std::string FeaturesStr = codegen::getFeaturesStr();
     codegen::setFunctionAttributes(CPUStr, FeaturesStr, *M);
-
-    if (!SameTriple) {
-      TLII.emplace(ModuleTriple);
-      LastModuleTriple = std::move(ModuleTriple);
-    }
 
     WithColor::note(vbss())
       << "Successfully loaded '" << Filename << "'!\n";
@@ -637,45 +686,20 @@ int main(int Argc, char** Argv) {
     return 1;
   }
 
-  Expected<std::unique_ptr<Module>> FirstModuleOrError = 
-    LoadModuleFromFile(ValidFilenames.front());
-  if (Error E = FirstModuleOrError.takeError()) {
-    errs() << toString(std::move(E)) << '\n';
-    if (!Permissive)
-      return 1;
-    if (!TLII.has_value())
-      return 1;
-  }
-
-  DebugifyCustomPassManager Passes;
-  Passes.add(new TargetLibraryInfoWrapperPass(*TLII));
-
-  // Add internal analysis passes from the target machine.
-  Passes.add(createTargetTransformInfoWrapperPass(TM ? TM->getTargetIRAnalysis()
-                                                     : TargetIRAnalysis()));
-
-  if (TM) {
-    auto& LTM = static_cast<LLVMTargetMachine&>(*TM);
-    Pass* TPC = LTM.createPassConfig(Passes);
-    Passes.add(TPC);
-  }
-
-  // Get the passes to be run before analysis.
-  auto O1OptPasses = GetO1PassesRequiredForSimplification();
-
   DeBaser::Factory DBFactory(Refs, Argv, Context);
   for (StringRef Filename : ValidFilenames) {
     if (Filename.empty())
       continue;
 
-    Expected<std::unique_ptr<Module>> ModuleOrError
+    Expected<std::unique_ptr<Module>> MOrError
       = LoadModuleFromFile(Filename);
-    if (Error E = ModuleOrError.takeError()) {
+    if (Error E = MOrError.takeError()) {
       errs() << toString(std::move(E)) << '\n';
       if (Permissive)
         continue;
       return 1;
     }
+    std::unique_ptr<Module> M = std::move(*MOrError);
 
 #if 0
     auto DB = DBFactory.New(Filename);
@@ -738,7 +762,7 @@ DeBaser::PrevFunctionInfo DeBaser::GetInfoAndUpdate(Function* F) {
   using AttrKind = Attribute::AttrKind;
   PrevFunctionInfo Info {};
   SetInfoWithAttrKind(HadNoinline, AttrKind::NoInline);
-  // SetInfoWithAttrKind(Info.HadAlwaysinline, AttrKind::AlwaysInline);
+  SetInfoWithAttrKind(HadAlwaysinline, AttrKind::AlwaysInline);
   // SetInfoWithAttrKind(HadUsed, AttrKind::Used?);
   return Info;
 }
