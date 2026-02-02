@@ -461,9 +461,29 @@ private:
 
   /// Handles debasing one function.
   bool debaseFunction(Function* F);
+  /// Handles debasing one function.
+  bool debaseConstructor(Function* F);
+  /// Handles debasing one function.
+  bool debaseDestructor(Function* F);
+
+  /// Checks if type is ctor or dtor.
+  bool isConstructor(Function* F) {
+    // TODO: Change this!
+    return false;
+  }
 };
 
 } // namespace `anonymous`
+
+bool DeBaser::debaseFunction(Function* F) {
+  errs() << llvm::demangle(F->getName()) << ": "
+         << F->getInstructionCount();
+  // TODO: Check the type of the function (ctor or dtor)!
+  if (this->isConstructor(F))
+    return debaseConstructor(F);
+  else
+    return debaseDestructor(F);
+}
 
 static void AssignFoundInstr(Instruction*& Out, Instruction* Found) {
   if (Out != nullptr) {
@@ -473,41 +493,7 @@ static void AssignFoundInstr(Instruction*& Out, Instruction* Found) {
   Out = Found;
 }
 
-bool DeBaser::debaseFunction(Function* F) {
-  errs() << llvm::demangle(F->getName()) << ": "
-         << F->getInstructionCount();
-  
-  // TODO: Check the type of the function (ctor or dtor)!
-  
-  Instruction* Begin = nullptr;
-  Instruction* End = nullptr;
-  Instruction* Continue = nullptr;
-
-  SmallDenseSet<Function*> BISet {
-    BI__debase_mark_begin,
-    BI__debase_mark_end,
-    BI__debase_continuation
-  };
-
-  auto CheckCallInstForDebaseMarker = [&] (CallBase& CB) {
-    Function* Called = CB.getCalledFunction();
-    if (Called == nullptr)
-      return 0;
-    if (!BISet.contains(Called))
-      return 0;
-    // Determine type.
-    if (Called == BI__debase_mark_begin) {
-      AssignFoundInstr(Begin, &CB);
-      return 1;
-    } else if (Called == BI__debase_mark_end) {
-      AssignFoundInstr(End, &CB);
-      return 3;
-    } else /*Called == BI__debase_continuation*/ {
-      AssignFoundInstr(Continue, &CB);
-      return 2;
-    }
-  };
-
+static void SkimFunctionInstrs(Function* F, llvm::function_ref<bool(CallBase&)> CheckCallInst) {
   for (BasicBlock& BB : *F) {
     for (Instruction& I : BB) {
       if (!isa<CallInst, CallBrInst>(I)) {
@@ -518,14 +504,67 @@ bool DeBaser::debaseFunction(Function* F) {
       // CallBase
       I.print(errs() << '\n');
       auto& CB = static_cast<CallBase&>(I);
-      if (CheckCallInstForDebaseMarker(CB) == 3)
-        goto end;
+      if (CheckCallInst(CB))
+        return;
     }
   }
+  // Didn't find the necessary values?
+}
 
-end:
+bool DeBaser::debaseConstructor(Function* F) {
+  Instruction* Begin = nullptr;
+  Instruction* Continue = nullptr;
+  int FoundCount = 0;
+
+  auto CheckCallInstForDebaseMarkers = [&] (CallBase& CB) {
+    Function* Called = CB.getCalledFunction();
+    if (Called == nullptr)
+      return false;
+    // Determine type.
+    if (Called == BI__debase_mark_begin)
+      AssignFoundInstr(Begin, &CB);
+    else if (Called == BI__debase_continuation)
+      AssignFoundInstr(Continue, &CB);
+    else
+      return false;
+    return ++FoundCount >= 2;
+  };
+
+  SkimFunctionInstrs(F, CheckCallInstForDebaseMarkers);
   errs() << '\n';
-  return false;
+
+  if (Begin == nullptr)
+    return false;
+  // TODO...
+  return true;
+}
+
+bool DeBaser::debaseDestructor(Function* F) {
+  Instruction* End = nullptr;
+  Instruction* Continue = nullptr;
+  int FoundCount = 0;
+
+  auto CheckCallInstForDebaseMarkers = [&] (CallBase& CB) {
+    Function* Called = CB.getCalledFunction();
+    if (Called == nullptr)
+      return false;
+    // Determine type.
+    if (Called == BI__debase_mark_end)
+      AssignFoundInstr(End, &CB);
+    else if (Called == BI__debase_continuation)
+      AssignFoundInstr(Continue, &CB);
+    else
+      return false;
+    return ++FoundCount >= 2;
+  };
+
+  SkimFunctionInstrs(F, CheckCallInstForDebaseMarkers);
+  errs() << '\n';
+
+  if (End == nullptr)
+    return false;
+  // TODO...
+  return true;
 }
 
 int main(int Argc, char** Argv) {
