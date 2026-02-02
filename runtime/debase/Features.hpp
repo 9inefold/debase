@@ -26,6 +26,9 @@
 #ifndef __clang__
 # error Debase requires llvmir output, and therefore can only be used on clang!
 #endif
+#if defined(_MSC_VER) || defined(_MSVC_LANG)
+# define DEBASE_MSVC 1
+#endif
 
 #ifndef __has_attribute
 # error __has_attribute(x) is required!
@@ -50,13 +53,17 @@
 # define DEBASE_NOEXCEPT
 #endif
 
-#if __has_attribute(always_inline)
+#if DEBASE_MSVC
+# define DEBASE_ALWAYS_INLINE __forceinline
+#elif __has_attribute(always_inline)
 # define DEBASE_ALWAYS_INLINE __attribute__((always_inline)) inline
 #else
 # define DEBASE_ALWAYS_INLINE inline
 #endif
 
-#if __has_attribute(noinline)
+#if DEBASE_MSVC
+# define DEBASE_ALWAYS_INLINE __declspec(noinline)
+#elif __has_attribute(noinline)
 # define DEBASE_NEVER_INLINE __attribute__((noinline))
 #else
 # define DEBASE_NEVER_INLINE

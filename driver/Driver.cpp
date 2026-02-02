@@ -414,11 +414,11 @@ public:
     for (auto [F, _] : LocatedRefs) {
       bool DidModify = false;
       for (FunctionPass* P : Passes) {
-        if (Verbose) {
-          WithColor::note(outs(), PassName)
-            << "Pass: " << P->getPassName() << "\n";
-          outs().flush();
-        }
+        //if (Verbose) {
+        //  WithColor::note(outs(), PassName)
+        //    << "Pass: " << P->getPassName() << "\n";
+        //  outs().flush();
+        //}
         if (P->runOnFunction(*F))
           DidModify = true;
       }
@@ -439,6 +439,8 @@ private:
 
   /// Gets a `PrevFunctionInfo` while updating the function.
   static PrevFunctionInfo GetInfoAndUpdate(Function* F);
+  /// Resets a `Function` using `PrevFunctionInfo`.
+  static void ResetInfo(Function* F, const PrevFunctionInfo& Info);
   /// Loads references matching the provided list, updating their attributes.
   bool loadAndUpdateRefsFromModule();
 };
@@ -678,6 +680,7 @@ int main(int Argc, char** Argv) {
   // TODO: Load unlinks from a file...
   SmallVector<std::string, 8> ExampleUnlinks;
   LoadUnlinks(ExampleUnlinks);
+
   // Compile the references...
   UnlinkRefs Refs(ExampleUnlinks);
   if (Refs.didFail()) {
@@ -686,10 +689,12 @@ int main(int Argc, char** Argv) {
     return 1;
   }
 
+  auto O1OptPasses = GetO1PassesRequiredForSimplification();
   DeBaser::Factory DBFactory(Refs, Argv, Context);
   for (StringRef Filename : ValidFilenames) {
     if (Filename.empty())
       continue;
+#if 0
 
     Expected<std::unique_ptr<Module>> MOrError
       = LoadModuleFromFile(Filename);
@@ -701,8 +706,9 @@ int main(int Argc, char** Argv) {
     }
     std::unique_ptr<Module> M = std::move(*MOrError);
 
-#if 0
-    auto DB = DBFactory.New(Filename);
+#else
+
+    std::optional<DeBaser> DB = DBFactory.New(Filename);
     if (!DB.has_value()) {
       if (!Permissive)
         return 1;
@@ -711,8 +717,10 @@ int main(int Argc, char** Argv) {
         << Filename << "'.\n";
       continue;
     }
+
+    DB->runPasses(O1OptPasses);
+    
 #endif
-    //DB->runPasses(O1OptPasses);
   }
 }
 
@@ -752,19 +760,26 @@ bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
   return true;
 }
 
-#define SetInfoWithAttrKind(MEMBER, KIND) do {                                \
-  Info.MEMBER = F->hasFnAttribute(KIND);                                      \
-  if (!Info.MEMBER)                                                           \
-    F->addFnAttr(KIND);                                                       \
-} while(0)
-
 DeBaser::PrevFunctionInfo DeBaser::GetInfoAndUpdate(Function* F) {
-  using AttrKind = Attribute::AttrKind;
-  PrevFunctionInfo Info {};
-  SetInfoWithAttrKind(HadNoinline, AttrKind::NoInline);
-  SetInfoWithAttrKind(HadAlwaysinline, AttrKind::AlwaysInline);
-  // SetInfoWithAttrKind(HadUsed, AttrKind::Used?);
+  using enum Attribute::AttrKind;
+  PrevFunctionInfo Info {
+    .HadNoinline      = F->hasFnAttribute(NoInline),
+    .HadAlwaysinline  = F->hasFnAttribute(AlwaysInline)
+  };
+  if (!Info.HadNoinline)
+    F->addFnAttr(NoInline);
+  if (Info.HadAlwaysinline)
+    F->removeFnAttr(AlwaysInline);
+  // SetInfoWithAttrKind(HadUsed, Used?);
   return Info;
+}
+
+void DeBaser::ResetInfo(Function* F, const PrevFunctionInfo& Info) {
+  using enum Attribute::AttrKind;
+  if (!Info.HadNoinline)
+    F->removeFnAttr(NoInline);
+  if (Info.HadAlwaysinline)
+    F->addFnAttr(AlwaysInline);
 }
 
 bool DeBaser::loadAndUpdateRefsFromModule() {
@@ -803,6 +818,8 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
   return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification() {
   // TODO: Use PassBuilder!!!!
   std::vector<FunctionPass*> Out;
@@ -812,8 +829,10 @@ static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification() {
   // CoroConditionalPass
   // AnnotationRemarksPass
   //Out.push_back(createCFGSimplificationPass());
-  Out.push_back(createSROAPass(false));
-  Out.push_back(createInstructionCombiningPass());
+  if (auto* Pass = createSROAPass(false))
+    Out.push_back(Pass);
+  if (auto* Pass = createInstructionCombiningPass())
+    Out.push_back(Pass);
   return Out;
 }
 
@@ -839,13 +858,53 @@ static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification() {
 #define initializeExpandFpLegacyPassPass(Registry) (void(0))
 #endif
 
+#define INITIALIZE_TARGETS(X) X(AArch64) X(ARM) X(X86)
+
+namespace {
+  inline void InitializeTargetInfos() {
+#define LLVM_TARGET(TargetName) LLVMInitialize##TargetName##TargetInfo();
+    INITIALIZE_TARGETS(LLVM_TARGET)
+#undef LLVM_TARGET
+  }
+
+  inline void InitializeTargets() {
+#define LLVM_TARGET(TargetName) LLVMInitialize##TargetName##Target();
+    INITIALIZE_TARGETS(LLVM_TARGET)
+#undef LLVM_TARGET
+  }
+
+  inline void InitializeTargetMCs() {
+#define LLVM_TARGET(TargetName) LLVMInitialize##TargetName##TargetMC();
+    INITIALIZE_TARGETS(LLVM_TARGET)
+#undef LLVM_TARGET
+  }
+
+  inline void InitializeAsmPrinters() {
+#define LLVM_ASM_PRINTER(TargetName) LLVMInitialize##TargetName##AsmPrinter();
+    INITIALIZE_TARGETS(LLVM_ASM_PRINTER)
+#undef LLVM_ASM_PRINTER
+  }
+
+  inline void InitializeAsmParsers() {
+#define LLVM_ASM_PARSER(TargetName) LLVMInitialize##TargetName##AsmParser();
+    INITIALIZE_TARGETS(LLVM_ASM_PARSER)
+#undef LLVM_ASM_PARSER
+  }
+
+  inline void InitializeDisassemblers() {
+#define LLVM_DISASSEMBLER(TargetName) LLVMInitialize##TargetName##Disassembler();
+    INITIALIZE_TARGETS(LLVM_DISASSEMBLER)
+#undef LLVM_DISASSEMBLER
+  }
+} // namespace `anonymous`
+
 static void LLVMInitializeEverything() {
-  InitializeAllTargetInfos();
-  InitializeAllTargets();
-  InitializeAllTargetMCs();
-  InitializeAllAsmPrinters();
-  InitializeAllAsmParsers();
-  InitializeAllDisassemblers();
+  InitializeTargetInfos();
+  InitializeTargets();
+  InitializeTargetMCs();
+  InitializeAsmPrinters();
+  InitializeAsmParsers();
+  InitializeDisassemblers();
 
   // Copied from llvm/tools/opt/optdriver.cpp
   //
