@@ -13,3 +13,6 @@ build
 .vscode
 **/*.inc
 **/*.hidden.*
+
+runtime/debase/Config.hpp
+driver/LLVMTargets.hpp

@@ -23,6 +23,7 @@
 #include "llvm/PassRegistry.h"
 // #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Demangle/Demangle.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Option/OptTable.h"
 #include "llvm/Option/Option.h"
@@ -321,7 +322,7 @@ static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification();
 
 static bool LoadUnlinks(SmallVectorImpl<std::string>& Unlinks) {
   static constexpr StringRef ExampleUnlinks[] {
-    "A", "B", "C",
+    "A", "B", "C", "E",
     //"D<*>",
     //"\"e::*\""
   };
@@ -355,6 +356,7 @@ class DeBaser {
   std::unique_ptr<Module> M = nullptr;
   /// The map of `(ReferencedFunc*, PrevInfo)` tuples.
   SmallDenseMap<Function*, PrevFunctionInfo> LocatedRefs;
+
   // Builtins...
   Function* BI__debase_mark_begin = nullptr;
   Function* BI__debase_mark_end = nullptr;
@@ -429,23 +431,102 @@ public:
     }
   }
 
+  /// Runs debaser on all functions.
+  void debaseFunctions() {
+    for (auto [F, _] : LocatedRefs) {
+      this->debaseFunction(F);
+    }
+  }
+
+  /// Resets function attributes to their original state
+  void resetFunctionAttrs() {
+    for (auto [F, PrevInfo] : LocatedRefs)
+      DeBaser::ResetInfo(F, PrevInfo);
+  }
+
   raw_ostream& error() {
     return WithColor::error(errs(), Argv[0]);
   }
 
 private:
-  /// Loads a `Module` from the specified file into `DeBaser::M`.
-  bool loadModule(StringRef Filename, LLVMContext& Context);
-
   /// Gets a `PrevFunctionInfo` while updating the function.
   static PrevFunctionInfo GetInfoAndUpdate(Function* F);
   /// Resets a `Function` using `PrevFunctionInfo`.
   static void ResetInfo(Function* F, const PrevFunctionInfo& Info);
+
+  /// Loads a `Module` from the specified file into `DeBaser::M`.
+  bool loadModule(StringRef Filename, LLVMContext& Context);
   /// Loads references matching the provided list, updating their attributes.
   bool loadAndUpdateRefsFromModule();
+
+  /// Handles debasing one function.
+  bool debaseFunction(Function* F);
 };
 
 } // namespace `anonymous`
+
+static void AssignFoundInstr(Instruction*& Out, Instruction* Found) {
+  if (Out != nullptr) {
+    // TODO: Error?
+    return;
+  }
+  Out = Found;
+}
+
+bool DeBaser::debaseFunction(Function* F) {
+  errs() << llvm::demangle(F->getName()) << ": "
+         << F->getInstructionCount();
+  
+  // TODO: Check the type of the function (ctor or dtor)!
+  
+  Instruction* Begin = nullptr;
+  Instruction* End = nullptr;
+  Instruction* Continue = nullptr;
+
+  SmallDenseSet<Function*> BISet {
+    BI__debase_mark_begin,
+    BI__debase_mark_end,
+    BI__debase_continuation
+  };
+
+  auto CheckCallInstForDebaseMarker = [&] (CallBase& CB) {
+    Function* Called = CB.getCalledFunction();
+    if (Called == nullptr)
+      return 0;
+    if (!BISet.contains(Called))
+      return 0;
+    // Determine type.
+    if (Called == BI__debase_mark_begin) {
+      AssignFoundInstr(Begin, &CB);
+      return 1;
+    } else if (Called == BI__debase_mark_end) {
+      AssignFoundInstr(End, &CB);
+      return 3;
+    } else /*Called == BI__debase_continuation*/ {
+      AssignFoundInstr(Continue, &CB);
+      return 2;
+    }
+  };
+
+  for (BasicBlock& BB : *F) {
+    for (Instruction& I : BB) {
+      if (!isa<CallInst, CallBrInst>(I)) {
+        if (isa<InvokeInst>(BB))
+          I.print(errs() << '\n');
+        continue;
+      }
+      // CallBase
+      I.print(errs() << '\n');
+      auto& CB = static_cast<CallBase&>(I);
+      if (CheckCallInstForDebaseMarker(CB) == 3)
+        goto end;
+    }
+  }
+
+end:
+  errs() << '\n';
+  return false;
+}
 
 int main(int Argc, char** Argv) {
   InitLLVM X(Argc, Argv);
@@ -694,33 +775,21 @@ int main(int Argc, char** Argv) {
   for (StringRef Filename : ValidFilenames) {
     if (Filename.empty())
       continue;
-#if 0
-
-    Expected<std::unique_ptr<Module>> MOrError
-      = LoadModuleFromFile(Filename);
-    if (Error E = MOrError.takeError()) {
-      errs() << toString(std::move(E)) << '\n';
-      if (Permissive)
-        continue;
-      return 1;
-    }
-    std::unique_ptr<Module> M = std::move(*MOrError);
-
-#else
 
     std::optional<DeBaser> DB = DBFactory.New(Filename);
     if (!DB.has_value()) {
-      if (!Permissive)
-        return 1;
       WithColor::warning(errs(), Argv[0])
         << "Failed to generate module for '"
         << Filename << "'.\n";
+      if (!Permissive)
+        return 1;
       continue;
     }
 
     DB->runPasses(O1OptPasses);
-    
-#endif
+    DB->debaseFunctions();
+    DB->resetFunctionAttrs();
+    // Run aggressive optimizer
   }
 }
 
@@ -836,29 +905,7 @@ static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification() {
   return Out;
 }
 
-#if !LLVM_VERSION_MIN(12)
-#define initializeScalarizeMaskedMemIntrinLegacyPassPass(Registry) (void(0))
-#endif
-#if !LLVM_VERSION_MIN(13)
-#define initializeReplaceWithVeclibLegacyPass(Registry) (void(0))
-#endif
-#if !LLVM_VERSION_MIN(15)
-#define initializeExpandLargeDivRemLegacyPassPass(Registry) (void(0))
-#define initializeJMCInstrumenterPass(Registry) (void(0))
-#define initializeSelectOptimizePass(Registry) (void(0))
-#endif
-#if !LLVM_VERSION_MIN(17)
-#define initializeCallBrPreparePass(Registry) (void(0))
-#endif
-#if !LLVM_VERSION_MIN(19)
-#define initializeAtomicExpandLegacyPass(Registry) (void(0))
-#define initializePostInlineEntryExitInstrumenterPass(Registry) (void(0))
-#endif
-#if !LLVM_VERSION_MIN(21)
-#define initializeExpandFpLegacyPassPass(Registry) (void(0))
-#endif
-
-#define INITIALIZE_TARGETS(X) X(AArch64) X(ARM) X(X86)
+#include "LLVMTargets.hpp"
 
 namespace {
   inline void InitializeTargetInfos() {
@@ -912,36 +959,8 @@ static void LLVMInitializeEverything() {
   PassRegistry &Registry = *PassRegistry::getPassRegistry();
   initializeCore(Registry);
   initializeScalarOpts(Registry);
-  initializeVectorization(Registry);
-  initializeIPO(Registry);
   initializeAnalysis(Registry);
   initializeTransformUtils(Registry);
   initializeInstCombine(Registry);
   initializeTarget(Registry);
-  // For codegen passes, only passes that do IR to IR transformation are
-  // supported.
-  initializeExpandLargeDivRemLegacyPassPass(Registry);
-  initializeExpandFpLegacyPassPass(Registry);
-  initializeExpandMemCmpLegacyPassPass(Registry);
-  initializeScalarizeMaskedMemIntrinLegacyPassPass(Registry);
-  initializeSelectOptimizePass(Registry);
-  initializeCallBrPreparePass(Registry);
-  initializeCodeGenPrepareLegacyPassPass(Registry);
-  initializeAtomicExpandLegacyPass(Registry);
-  initializeWinEHPreparePass(Registry);
-  initializeDwarfEHPrepareLegacyPassPass(Registry);
-  initializeSafeStackLegacyPassPass(Registry);
-  initializeSjLjEHPreparePass(Registry);
-  initializePreISelIntrinsicLoweringLegacyPassPass(Registry);
-  initializeGlobalMergePass(Registry);
-  initializeIndirectBrExpandLegacyPassPass(Registry);
-  initializeInterleavedLoadCombinePass(Registry);
-  initializeInterleavedAccessPass(Registry);
-  initializePostInlineEntryExitInstrumenterPass(Registry);
-  initializeUnreachableBlockElimLegacyPassPass(Registry);
-  initializeExpandReductionsPass(Registry);
-  initializeWasmEHPreparePass(Registry);
-  initializeWriteBitcodePassPass(Registry);
-  initializeReplaceWithVeclibLegacyPass(Registry);
-  initializeJMCInstrumenterPass(Registry);
 }

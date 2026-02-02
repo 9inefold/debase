@@ -6,6 +6,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE debase::llvm debase::rt)
 #  -fno-exceptions -funwind-tables -stdlib=libc++
 #)
 
+foreach(target IN LISTS DEBASE_TARGETS)
+  set(DEBASE_TARGETS_X "${DEBASE_TARGETS_X} X(${target})") 
+endforeach()
+configure_inline(LLVMTargets.hpp.in @ONLY)
+
 add_custom_target(move-zlib ALL)
 add_custom_command(
   TARGET move-zlib

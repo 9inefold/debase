@@ -18,8 +18,6 @@ endif()
 
 find_package(LLVM REQUIRED CONFIG)
 separate_arguments(LLVM_DEFS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
-
-set(DEBASE_TARGETS AArch64 ARM X86)
 llvm_map_components_to_libnames(llvm_libs
   ${DEBASE_TARGETS} #${llvm_components}
   InstCombine IPO Passes TransformUtils
