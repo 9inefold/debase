@@ -8,15 +8,20 @@ endif()
 
 project(
   debase
-  VERSION 0.0.2
+  VERSION 1.0.0
   LANGUAGES CXX C
 )
 
 include(SetFlags)
 include(SetOptions)
-include(LLVM)
 
+option(DEBASE_RUNTIME_ONLY "Only add the debase runtime." OFF)
 valued_option(DEBASE_VENDOR_NAME "Name used in --version." "Debaser")
 
 add_subdirectory(runtime)
-add_subdirectory(driver)
+if(DEBASE_RUNTIME_ONLY)
+  message(STATUS "Only providing debase::runtime")
+else()
+  include(DebaseLLVM)
+  add_subdirectory(driver)
+endif()

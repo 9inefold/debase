@@ -37,11 +37,11 @@ DEBASE_ANNOTATION_CC void __debase_continuation(void) DEBASE_NOEXCEPT;
 /// Marks the start of a constructor body.
 #define __debase_ctor_begin __debase_mark_begin
 /// Marks the end of a constructor body.
-#define __debase_ctor_end __debase_mark_begin
+#define __debase_ctor_end __debase_mark_end
 /// Marks the start of a destructor body.
 #define __debase_dtor_begin __debase_mark_begin
 /// Marks the end of a destructor body. Rarely needed.
-#define __debase_dtor_end __debase_mark_begin
+#define __debase_dtor_end __debase_mark_end
 
 DEBASE_END_EXTERN_C
 

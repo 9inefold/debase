@@ -49,7 +49,7 @@ define dso_local void @_ZN1AD2Ev(ptr noundef nonnull align 8 dereferenceable(8) 
           to label %5 unwind label %6, !dbg !234
 
 5:                                                ; preds = %1
-  notail call preserve_mostcc void @__debase_mark_begin() #6, !dbg !235
+  notail call preserve_mostcc void @__debase_mark_end() #6, !dbg !235
   ret void, !dbg !236
 
 6:                                                ; preds = %1
@@ -81,6 +81,9 @@ declare dso_local ptr @__cxa_begin_catch(ptr)
 
 declare dso_local void @_ZSt9terminatev()
 
+; Function Attrs: nounwind
+declare dso_local preserve_mostcc void @__debase_mark_end() #2
+
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
 define dso_local void @_ZN1AD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 !dbg !237 {
   %2 = alloca ptr, align 8
@@ -106,7 +109,7 @@ define dso_local void @_ZN1BD2Ev(ptr noundef nonnull align 8 dereferenceable(8) 
           to label %5 unwind label %6, !dbg !255
 
 5:                                                ; preds = %1
-  notail call preserve_mostcc void @__debase_mark_begin() #6, !dbg !257
+  notail call preserve_mostcc void @__debase_mark_end() #6, !dbg !257
   call void @_ZN1AD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #6, !dbg !258
   ret void, !dbg !259
 

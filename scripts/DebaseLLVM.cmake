@@ -1,11 +1,10 @@
 include_guard(DIRECTORY)
 
-Find_Package(LLVM REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-
+find_package(LLVM REQUIRED CONFIG)
 separate_arguments(LLVM_DEFS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
 message(STATUS "LLVM includes: ${LLVM_INCLUDE_DIRS}")
 message(STATUS "LLVM definitions: ${LLVM_DEFINITIONS}")
@@ -22,7 +21,7 @@ if(DEFINED DUMP_LIBS AND DUMP_LIBS)
 endif()
 
 add_library(debase-llvm INTERFACE)
-add_library(debase::LLVM ALIAS debase-llvm)
+add_library(debase::llvm ALIAS debase-llvm)
 
 target_include_directories(debase-llvm SYSTEM INTERFACE ${LLVM_INCLUDE_DIRS})
 target_link_libraries(debase-llvm INTERFACE ${LLVM_AVAILABLE_LIBS})
