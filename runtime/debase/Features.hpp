@@ -62,7 +62,7 @@
 #endif
 
 #if DEBASE_MSVC
-# define DEBASE_ALWAYS_INLINE __declspec(noinline)
+# define DEBASE_NEVER_INLINE __declspec(noinline)
 #elif __has_attribute(noinline)
 # define DEBASE_NEVER_INLINE __attribute__((noinline))
 #else
