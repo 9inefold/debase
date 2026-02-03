@@ -1,0 +1,8 @@
+{
+  "patterns": [
+    "A", "B", "C", "E"
+  ],
+  "files": [
+    "{sourcedir}/Class.ll"
+  ]
+}
