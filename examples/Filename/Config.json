@@ -1,0 +1,9 @@
+{
+  "patterns": [
+    "**/{file.stem}*"
+  ],
+  "files": [
+    "{this.dir}/Simple.ll",
+    "{this.dir}/SimpleMSVC.ll"
+  ]
+}
