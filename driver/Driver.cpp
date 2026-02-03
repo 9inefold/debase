@@ -653,12 +653,13 @@ int main(int Argc, char** Argv) {
     return 0;
   }
 
-  if (InputFilenames.empty()) {
+  if (InputFilenames.empty() && ConfigFile.empty()) {
     WithColor::error(errs(), Argv[0])
       << "No input files provided!";
     return 1;
   }
 
+  std::optional<matjson::Value> ConfigJSON;
   if (!ConfigFile.empty()) {
     ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
         MemoryBuffer::getFile(ConfigFile);
@@ -668,7 +669,9 @@ int main(int Argc, char** Argv) {
       return 1;
     }
 
-    //(*FileOrErr)->getMemBufferRef();
+    StringRef ConfigSrc = (*FileOrErr)->getBuffer();
+    ConfigJSON.emplace(matjson::parse(ConfigSrc).unwrap());
+    //auto ConfigSrc = ConfigJSON->get("files").unwrap().asArray().unwrap();
   }
 
   if (NoOutput && !OutputFilepath.empty()) {

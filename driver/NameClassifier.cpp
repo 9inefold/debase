@@ -55,11 +55,11 @@ namespace gnu {
 
 using namespace llvm::itanium_demangle;
 
-static SymbolKind ClassifyFunction(Node* AST, Features* Out) {
+static SymbolKind ClassifyFunction(Node* AST, Features* Out, std::string_view Name) {
   // TODO: Handle
   itanium_demangle::OutputBuffer OB;
   AST->print(OB);
-  outs() << AST->getBaseName() << ": "
+  outs() << Name << ": "
          << std::string_view(OB) << '\n';
   return SymbolKind::Invalid;
 }
@@ -77,9 +77,9 @@ SymbolKind ItaniumClassifier::classify(const std::string& Sym, Features* Out) {
   if (AST == nullptr)
     // Print error?
     return SymbolKind::Invalid;
-  if (false)
+  if (true)
     // TODO: Handle
-    return gnu::ClassifyFunction(nullptr, Out);
+    return gnu::ClassifyFunction(AST, Out, Sym);
   // TODO: Handle
   return SymbolKind::Invalid;
 }
