@@ -1,6 +1,6 @@
 //===- driver/Driver.cpp --------------------------------------------------===//
 //
-// Copyright (C) 2025 Eightfold
+// Copyright (C) 2025-2026 Ninefold
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,13 +17,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "Shared.hpp"
+#include "LLVMTargets.hpp"
+#include "NameClassifier.hpp"
+#include "Triple.hpp"
 #include "UniqueStringVector.hpp"
 #include "UnlinkRefs.hpp"
 #include "llvm/InitializePasses.h"
 #include "llvm/PassRegistry.h"
 // #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Demangle/Demangle.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Option/OptTable.h"
 #include "llvm/Option/Option.h"
@@ -277,19 +279,35 @@ static raw_ostream& vbss() {
 ////////////////////////////////////////////////////////////////////////////////
 // LLVM Related Functions
 
-/// On some versions `Module::setTargetTriple` takes a `StringRef`, on others
-/// it takes... a `Triple`. This utility helps keep things smooth.
-class SetTargetTripleCtorCast {
-  std::string Data;
-public:
-  SetTargetTripleCtorCast(StringRef Unnormalized) : 
-    Data(Triple::normalize(Unnormalized)) {}
-  SetTargetTripleCtorCast(const std::string& Unnormalized) :
-    SetTargetTripleCtorCast(StringRef(Unnormalized)) {}
-  
-  operator StringRef() const { return StringRef(Data); }
-  operator Triple() const { return Triple(Data); }
-};
+static void CheckStuff(const Triple& T) {
+  outs() << T.getTriple() << " {\n  ";
+  outs() << "Arch:    " << debase_tool::get_triple_arch(T) << "\n  ";
+  if (T.getSubArch() != Triple::SubArchType::NoSubArch)
+    outs() << "SubArch: " << debase_tool::get_triple_subarch(T) << "\n  ";
+  outs() << "Vendor:  " << debase_tool::get_triple_vendor(T) << "\n  ";
+  if (!T.isOSUnknown())
+    outs() << "OS:      " << debase_tool::get_triple_os(T) << "\n  ";
+  else if (isTripleAndroidOS(T))
+    outs() << "OS:      " << T.getOSName() << "\n  ";
+  outs() << "Env:     " << debase_tool::get_triple_env(T) << '\n';
+  outs() << "}\n";
+}
+
+static void CheckStuff(const std::string& Env) {
+  Triple T(Env);
+  CheckStuff(T);
+}
+
+static void CheckStuff() {
+  CheckStuff("i386-pc-windows-msvc");
+  CheckStuff("arm64-apple-darwin");
+  CheckStuff("arm-linux-androideabi29");
+  CheckStuff("aarch64-linux-android29");
+  CheckStuff("arm64-apple-macosx10.7");
+  CheckStuff("x86_64-pc-windows-msvc19.34.31935");
+  CheckStuff("aarch64-unknown-linux-gnu");
+  CheckStuff("armv7-apple-ios");
+}
 
 /// Info that stays the same with every triple.
 struct CachedTargetInfo {
@@ -354,6 +372,8 @@ class DeBaser {
 
   /// The module itself.
   std::unique_ptr<Module> M = nullptr;
+  /// Used to determine the type of functions.
+  Classifier* SymClassifier = nullptr;
   /// The map of `(ReferencedFunc*, PrevInfo)` tuples.
   SmallDenseMap<Function*, PrevFunctionInfo> LocatedRefs;
 
@@ -386,7 +406,7 @@ public:
     std::optional<DeBaser> New(StringRef Filename) {
       std::optional<DeBaser> DB;
       DB.emplace(Filename, Refs, Argv, Context);
-      if (!DB->LoadedModule || !DB->SetUnlinks || !DB->LastCheck) {
+      if (!DB->LoadedModule) {
         // Unfortunately, we have failed... Return nothing.
         return std::nullopt;
       }
@@ -410,29 +430,22 @@ public:
     }
   }
 
+  void setNameDemangler(Classifier* C) {
+    this->SymClassifier = C;
+  }
+
+  bool loadRefsAndBuiltins();
+
   /// Runs a set of passes on our collected functions.
   /// @return `true` if the function was modified.
-  void runPasses(const std::vector<FunctionPass*>& Passes, StringRef PassName = "") {
-    for (auto [F, _] : LocatedRefs) {
-      bool DidModify = false;
-      for (FunctionPass* P : Passes) {
-        //if (Verbose) {
-        //  WithColor::note(outs(), PassName)
-        //    << "Pass: " << P->getPassName() << "\n";
-        //  outs().flush();
-        //}
-        if (P->runOnFunction(*F))
-          DidModify = true;
-      }
-      if (DidModify && Verbose) {
-        WithColor::note(outs(), PassName)
-          << F->getName() << " was modified.\n";
-      }
-    }
-  }
+  void runPasses(const std::vector<FunctionPass*>& Passes, StringRef PassName = "");
 
   /// Runs debaser on all functions.
   void debaseFunctions() {
+    if (!this->SetUnlinks) {
+      error() << "SetUnlinks is false!\n";
+      return;
+    }
     for (auto [F, _] : LocatedRefs) {
       this->debaseFunction(F);
     }
@@ -444,7 +457,12 @@ public:
       DeBaser::ResetInfo(F, PrevInfo);
   }
 
-  raw_ostream& error() {
+  Triple getTriple() const {
+    assert(M && "Module was not initialized!");
+    return Triple(M->getTargetTriple());
+  }
+
+  raw_ostream& error() const {
     return WithColor::error(errs(), Argv[0]);
   }
 
@@ -474,6 +492,41 @@ private:
 };
 
 } // namespace `anonymous`
+
+bool DeBaser::loadRefsAndBuiltins() {
+  if (!loadAndUpdateRefsFromModule())
+    return false;
+  this->SetUnlinks = true;
+  // Load builtins...
+  BI__debase_mark_begin   = M->getFunction("__debase_mark_begin");
+  BI__debase_mark_end     = M->getFunction("__debase_mark_end");
+  BI__debase_continuation = M->getFunction("__debase_continuation");
+  return true;
+}
+
+void DeBaser::runPasses(const std::vector<FunctionPass*>& Passes, StringRef PassName) {
+  if (!this->SetUnlinks) {
+    error() << "SetUnlinks is false!\n";
+    return;
+  }
+
+  for (auto [F, _] : LocatedRefs) {
+    bool DidModify = false;
+    for (FunctionPass* P : Passes) {
+      //if (Verbose) {
+      //  WithColor::note(outs(), PassName)
+      //    << "Pass: " << P->getPassName() << "\n";
+      //  outs().flush();
+      //}
+      if (P->runOnFunction(*F))
+        DidModify = true;
+    }
+    if (DidModify && Verbose) {
+      WithColor::note(outs(), PassName)
+        << F->getName() << " was modified.\n";
+    }
+  }
+}
 
 bool DeBaser::debaseFunction(Function* F) {
   errs() << llvm::demangle(F->getName()) << ": "
@@ -809,8 +862,13 @@ int main(int Argc, char** Argv) {
     return 1;
   }
 
+  // CheckStuff();
   auto O1OptPasses = GetO1PassesRequiredForSimplification();
   DeBaser::Factory DBFactory(Refs, Argv, Context);
+
+  ItaniumClassifier IClass;
+  MSVCClassifier MClass;
+
   for (StringRef Filename : ValidFilenames) {
     if (Filename.empty())
       continue;
@@ -822,6 +880,24 @@ int main(int Argc, char** Argv) {
         << Filename << "'.\n";
       if (!Permissive)
         return 1;
+      continue;
+    }
+
+    llvm::Triple T = DB->getTriple();
+    auto IsItanium = checkTripleTargetSymbolType(T);
+    if (!IsItanium.has_value()) {
+      errs() << "Invalid triple for \"" << Filename
+             << "\": " << T.getTriple() << "\n";
+      continue;
+    }
+
+    if (*IsItanium)
+      DB->setNameDemangler(&IClass);
+    else
+      DB->setNameDemangler(&MClass);
+
+    if (!DB->loadRefsAndBuiltins()) {
+      errs() << "Unable to load builtins for \"" << Filename << "\"\n";
       continue;
     }
 
@@ -838,14 +914,7 @@ DeBaser::DeBaser(StringRef Filename, UnlinkRefs& Refs,
                  char* const* Argv, LLVMContext& Context)
      : Refs(Refs), Argv(Argv) {
   assert(!Refs.didFail());
-  if (!loadModule(Filename, Context))
-    return;
-  if (!loadAndUpdateRefsFromModule())
-    return;
-  // Load builtins...
-  BI__debase_mark_begin   = M->getFunction("__debase_mark_begin");
-  BI__debase_mark_end     = M->getFunction("__debase_mark_end");
-  BI__debase_continuation = M->getFunction("__debase_continuation");
+  loadModule(Filename, Context);
 }
 
 bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
@@ -891,7 +960,20 @@ void DeBaser::ResetInfo(Function* F, const PrevFunctionInfo& Info) {
 }
 
 bool DeBaser::loadAndUpdateRefsFromModule() {
+  if (!LoadedModule)
+    return false;
+  if (!this->SymClassifier) {
+    error() << "SymClassifier was not initialized!\n";
+    return false;
+  }
+
+  Features FFeats {};
   for (Function& F : M->getFunctionList()) {
+    std::string Name = F.getName().str();
+    SymClassifier->classify(Name, &FFeats);
+    if (!FFeats.isCtor() && !FFeats.isDtor())
+      // Not something worth looking at (right now).
+      continue;
     if (!Refs.match(F.getName()))
       continue;
     // TODO: Switch when complex added.
@@ -943,8 +1025,6 @@ static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification() {
     Out.push_back(Pass);
   return Out;
 }
-
-#include "LLVMTargets.hpp"
 
 namespace {
   inline void InitializeTargetInfos() {

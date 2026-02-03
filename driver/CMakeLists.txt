@@ -1,6 +1,12 @@
 include_guard(DIRECTORY)
 
-add_executable(${PROJECT_NAME} Driver.cpp UnlinkRefs.cpp)
+add_executable(${PROJECT_NAME}
+  Driver.cpp
+  NameClassifier.cpp
+  Triple.cpp
+  UnlinkRefs.cpp
+)
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
 target_link_libraries(${PROJECT_NAME} PRIVATE debase::llvm debase::rt)
 #target_compile_options(${PROJECT_NAME} PUBLIC
 #  -fno-exceptions -funwind-tables -stdlib=libc++
