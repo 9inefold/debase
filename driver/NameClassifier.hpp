@@ -36,10 +36,10 @@ struct Features {
   std::string BaseName;
   SmallVector<std::string, 2> NestedNames;
 public:
-  bool isInvalid() const { SymKind == SymbolKind::Invalid; }
-  bool isCtor() const { SymKind == SymbolKind::Constructor; }
-  bool isDtor() const { SymKind == SymbolKind::Destructor; }
-  bool isOther() const { SymKind == SymbolKind::Other; }
+  bool isInvalid() const { return SymKind == SymbolKind::Invalid; }
+  bool isCtor() const { return SymKind == SymbolKind::Constructor; }
+  bool isDtor() const { return SymKind == SymbolKind::Destructor; }
+  bool isOther() const { return SymKind == SymbolKind::Other; }
   void clear() {
     SymKind = SymbolKind::Invalid;
     BaseName.clear();
