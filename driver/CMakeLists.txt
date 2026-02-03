@@ -1,5 +1,7 @@
 include_guard(DIRECTORY)
 
+CPMAddPackage("gh:geode-sdk/json@3.2.1")
+
 add_executable(${PROJECT_NAME}
   Driver.cpp
   NameClassifier.cpp
@@ -7,7 +9,9 @@ add_executable(${PROJECT_NAME}
   UnlinkRefs.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
-target_link_libraries(${PROJECT_NAME} PRIVATE debase::llvm debase::rt)
+target_link_libraries(${PROJECT_NAME} PRIVATE
+  debase::llvm debase::rt mat-json
+)
 #target_compile_options(${PROJECT_NAME} PUBLIC
 #  -fno-exceptions -funwind-tables -stdlib=libc++
 #)

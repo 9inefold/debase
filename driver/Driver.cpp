@@ -60,6 +60,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <matjson.hpp>
 
 #ifndef NDEBUG
 # include "llvm/Support/BuryPointer.h"
@@ -88,8 +89,13 @@ namespace debase_tool {
 
 static cl::list<std::string>
 InputFilenames(cl::Positional,
-               cl::desc("<input file>"),
+               cl::desc("<input files...>"),
                cl::cat(DebaseToolCategory));
+
+static cl::opt<std::string>
+ConfigFile("config",
+           cl::desc("Config file"), cl::value_desc("config"),
+           cl::cat(DebaseToolCategory));
 
 static cl::opt<std::string>
 OutputFilepath("o",
@@ -122,7 +128,7 @@ Verbose("verbose",
 
 static cl::alias
 VerboseA("V",
-        cl::desc("Alias for '-verbose'"),
+        cl::desc("Alias for '--verbose'"),
         cl::aliasopt(Verbose),
         cl::cat(DebaseToolCategory));
 
@@ -651,6 +657,18 @@ int main(int Argc, char** Argv) {
     WithColor::error(errs(), Argv[0])
       << "No input files provided!";
     return 1;
+  }
+
+  if (!ConfigFile.empty()) {
+    ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
+        MemoryBuffer::getFile(ConfigFile);
+    if (std::error_code EC = FileOrErr.getError()) {
+      WithColor::error(errs(), Argv[0])
+        << "Could not open input file: " << EC.message();
+      return 1;
+    }
+
+    //(*FileOrErr)->getMemBufferRef();
   }
 
   if (NoOutput && !OutputFilepath.empty()) {
