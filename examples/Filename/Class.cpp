@@ -60,3 +60,12 @@ ClassAnon::~ClassAnon() {
   std::printf("~Class`anonymous`!\n");
   __debase_dtor_end();
 }
+
+extern IClass* getClass() {
+  return new ClassAnon();
+}
+
+extern void deleteClass(IClass*& clazz) {
+  delete clazz;
+  clazz = nullptr;
+}
