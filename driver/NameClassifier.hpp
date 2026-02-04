@@ -37,16 +37,20 @@ enum class SymbolKind {
   Ignorable,
 };
 
+/// The useful features found in a function symbol.
 struct Features {
   SymbolKind SymKind = SymbolKind::Invalid;
   int Variant = -1; // For itanium compat
   std::string BaseName;
   SmallVector<std::string, 2> NestedNames;
 public:
-  bool isInvalid() const { return SymKind == SymbolKind::Invalid; }
   bool isCtor() const { return SymKind == SymbolKind::Constructor; }
   bool isDtor() const { return SymKind == SymbolKind::Destructor; }
+  bool isCtorDtor() const { return isCtor() || isDtor(); }
   bool isOther() const { return SymKind == SymbolKind::Other; }
+  bool isIgnorable() const { return SymKind == SymbolKind::Ignorable; }
+  bool isInvalid() const { return SymKind == SymbolKind::Invalid; }
+  
   void clear() {
     SymKind = SymbolKind::Invalid;
     Variant = -1;
