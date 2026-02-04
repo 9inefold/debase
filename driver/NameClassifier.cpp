@@ -35,7 +35,7 @@
 using namespace debase_tool;
 using namespace llvm;
 
-#define DEBUG_DUMP 0
+#define DEBUG_DUMP 1
 #define DEBUG_DUMP_X DEBUG_DUMP && 0
 
 namespace {

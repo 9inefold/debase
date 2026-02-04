@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "llvm/Support/Allocator.h"
 #include "llvm/Support/Error.h"
 #include "LLVM.hpp"
 #include <cstdint>
@@ -48,20 +49,27 @@ private:
 struct Pattern::Token {
   enum Kind : uint32_t {
     KUnknown,
-    KSimple,    // ::x::y::Z
-    KAnonymous, // @
-    KGlob,      // **
-    KRegex,     // *+?[...]
-    KThis,      // {this.*}
-    KLateBind   // {file.*}
+    KSimple,    // eg. `::x::y::Z`
+    KAnonymous, // `@`
+    KGlob,      // `**`
+    KThis,      // `{this.*}`
+    KLateBind,  // `{file.*}`
+    KRegex,     // eg. `I*X+0?[...]`
+    KSimpleFmt, // `I{file.stem}v{...}` => `"I%0v%1" + [file.stem, ...]`
+    KRegexFmt,  // `I?{file.stem}+` => `"I?(%0)+" + [file.stem]`
   };
 
   /// The kind of the token.
   Kind kind = KSimple;
   /// The length of the token data.
-  uint32_t size : 31 = 0;
+  uint32_t size : 24 = 0;
+  /// The number of trailing arguments (for a format group)
+  /// Currently only 6 options, so it can be 6 bits.
+  uint32_t trailing : 3 = 0;
   /// If this token should be grouped with the next.
   uint32_t grouped : 1 = 0;
+  /// If this token's text has been modified.
+  uint32_t modified : 1 = 0;
   /// The token data.
   const char* data = nullptr;
 
@@ -82,6 +90,7 @@ public:
 };
 
 /// Lexes `Token`s for a `Pattern` from `Pat`.
-llvm::Error lexTokensForPattern(StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks);
+llvm::Error lexTokensForPattern(StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks,
+                                llvm::BumpPtrAllocator& BP);
 
 } // namespace debase_tool

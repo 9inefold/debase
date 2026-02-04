@@ -31,6 +31,7 @@ using namespace debase_tool;
 using namespace llvm;
 
 using Token = Pattern::Token;
+static_assert(sizeof(Token) <= 2 * sizeof(void*));
 
 static Error MakeError(const Twine& Msg) {
   return createStringError(llvm::inconvertibleErrorCode(), Msg);
@@ -67,14 +68,20 @@ class PatternLexer {
   using enum Pattern::Token::Kind;
   /// Output tokens.
   SmallVectorImpl<Pattern::Token>& Toks;
+  /// Allocator for compound groups.
+  BumpPtrAllocator& BP;
   /// The pattern.
   StringRef Pat;
   /// The current token text.
   StringRef Curr = "";
 
 public:
-  PatternLexer(StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks)
-   : Toks(Toks), Pat(Pat) {}
+  PatternLexer(StringRef Pat,
+               SmallVectorImpl<Pattern::Token>& Toks,
+               BumpPtrAllocator& BP)
+   : Toks(Toks), Pat(Pat), BP(BP) {}
+  
+  class CompoundHandler;
   
   /// Pre-checks + Lexing + Post-checks.
   Error lex();
@@ -113,7 +120,55 @@ public:
   }
 };
 
+/// CompoundHandler deals with things that might use regex or mixed replacements.
+/// eg. `{this.stem}Class`, `I?Foo`, `[A-Z]*{file.stem}+[^123]`
+///
+/// The regex flavor is very limited as it only needs to work with C++ identifiers.
+/// While this technically could be extended to a lot of utf8 characters, I don't
+/// care enough to support that lmao
+///
+/// It also doesn't support any grouping at the moment.
+///
+/// Keep in mind replacements add overhead to regex since it needs to be recompiled
+/// for every file.
+class PatternLexer::CompoundHandler {
+  PatternLexer* Lex;
+  StringRef Curr;
+public:
+  CompoundHandler(PatternLexer* Lex) : Lex(Lex), Curr(Lex->Curr) {
+    assert(Lex != nullptr && "Invalid this?");
+  }
+  ~CompoundHandler() {
+    // End the compound group.
+    Lex->Toks.back().grouped = false;
+    Lex->Curr = "";
+  }
+
+  /// Lex a compound group.
+  Error lex();
+
+  void tok(Token::Kind K) {
+    //Toks.push_back(Token::New(K, Curr, true));
+    llvm_unreachable("unimplemented?");
+  }
+  void tok(Token::Kind K, StringRef Data) {
+    Lex->tok(K, Data, /*Grouped=*/true);
+  }
+
+  /// Reports an error using `Curr`.
+  Error report(const Twine& Msg) const {
+    return Lex->report(Lex->Curr, Msg);
+  }
+  /// Reports an error using input `S`.
+  Error report(StringRef S, const Twine& Msg) {
+    return Lex->report(S, Msg);
+  }
+};
+
 } // namespace `anonymous`
+
+/// Alias for `PatternLexer::CompoundHandler`.
+using CompoundLexer = PatternLexer::CompoundHandler;
 
 #define LOAD_NEXT_TOKEN() do {                                  \
   if (!loadNextToken())                                         \
@@ -167,7 +222,11 @@ Error PatternLexer::lexImpl() {
       continue;
     }
 
-    return report("unknown particle");
+    // Must be a compound type.
+    CompoundHandler H(this);
+    if (Error E = H.lex())
+      return E;
+    //return report("unknown particle");
   }
 
   return Error::success();
@@ -247,8 +306,14 @@ bool PatternLexer::loadNextToken() {
   return true;
 }
 
+Error CompoundLexer::lex() {
+  this->tok(KUnknown, Curr);
+  return report("unimplemented compound");
+}
+
 Error debase_tool::lexTokensForPattern(StringRef Pat,
-                                       SmallVectorImpl<Pattern::Token>& Toks) {
+                                       SmallVectorImpl<Pattern::Token>& Toks,
+                                       BumpPtrAllocator& BP) {
   Toks.clear();
   Pat = Pat.trim();
   Pat.consume_front("::");
@@ -256,7 +321,7 @@ Error debase_tool::lexTokensForPattern(StringRef Pat,
   if (Pat.empty())
     return MakeError("invalid pattern: cannot be empty");
   
-  PatternLexer PL(Pat, Toks);
+  PatternLexer PL(Pat, Toks, BP);
   return PL.lex();
 }
 

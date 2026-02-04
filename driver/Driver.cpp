@@ -658,9 +658,10 @@ static raw_ostream& operator<<(raw_ostream& OS, Pattern::Token Tok) {
     return OS << Tok.str() << "'>";
 }
 
-static bool TestLexPattern(StringRef P, const bool ShouldPass, int Indent = 0) {
+static bool TestLexPattern(StringRef P, const bool ShouldPass,
+                           llvm::BumpPtrAllocator& BP, int Indent = 0) {
   SmallVector<Pattern::Token> Toks;
-  if (Error E = lexTokensForPattern(P, Toks)) {
+  if (Error E = lexTokensForPattern(P, Toks, BP)) {
     outs().indent(Indent * 2);
     if (!ShouldPass) {
       WithColor(outs(), raw_ostream::GREEN)
@@ -695,21 +696,23 @@ static bool TestLexPattern(StringRef P, const bool ShouldPass, int Indent = 0) {
   return ShouldPass;
 }
 
-static bool TestLexGroup(StringRef Name, ArrayRef<std::pair<StringRef, bool>> Patterns) {
+static bool TestLexGroup(StringRef Name, ArrayRef<std::pair<StringRef, bool>> Patterns,
+                         llvm::BumpPtrAllocator& BP) {
   WithColor(outs(), raw_ostream::YELLOW) << Name << ":\n";
   bool Result = true;
   for (auto [P, ShouldPass] : Patterns)
-    if (!TestLexPattern(P, ShouldPass, 1))
+    if (!TestLexPattern(P, ShouldPass, BP, 1))
       Result = false;
   return Result;
 }
 
-#define LEX_TESTS(NAME, ...) [&Result] () {               \
+#define LEX_TESTS(NAME, ...) [&Result, &BP] () {          \
   std::pair<StringRef, bool> Patterns[] { __VA_ARGS__ };  \
-  Result = TestLexGroup(NAME, Patterns) && Result;        \
+  Result = TestLexGroup(NAME, Patterns, BP) && Result;    \
 }()
 
 static void RunLexTests() {
+  llvm::BumpPtrAllocator BP;
   bool Result = true;
 
   LEX_TESTS("Simple",
@@ -754,6 +757,10 @@ static void RunLexTests() {
     {"{.stem}",     false},
     {"{@.stem}",    false},
     {"{this.@}",    false},
+  );
+
+  LEX_TESTS("Compound",
+    {"I{file.stem}",      true}
   );
 
   std::exit(Result ? 0 : 1);
