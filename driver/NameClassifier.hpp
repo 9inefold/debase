@@ -15,6 +15,11 @@
 //     limitations under the License.
 //
 //===----------------------------------------------------------------------===//
+///
+/// \file
+/// Provide utilities to parse symbol names from itanium/microsoft ABIs.
+///
+//===----------------------------------------------------------------------===//
 
 #pragma once
 
@@ -29,10 +34,12 @@ enum class SymbolKind {
   Constructor,
   Destructor,
   Other,
+  Ignorable,
 };
 
 struct Features {
   SymbolKind SymKind = SymbolKind::Invalid;
+  int Variant = -1; // For itanium compat
   std::string BaseName;
   SmallVector<std::string, 2> NestedNames;
 public:
@@ -42,6 +49,7 @@ public:
   bool isOther() const { return SymKind == SymbolKind::Other; }
   void clear() {
     SymKind = SymbolKind::Invalid;
+    Variant = -1;
     BaseName.clear();
     NestedNames.clear();
   }

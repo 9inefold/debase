@@ -15,12 +15,18 @@
 //     limitations under the License.
 //
 //===----------------------------------------------------------------------===//
+///
+/// \file
+/// Provide utilities to parse symbol names from itanium/microsoft ABIs.
+///
+//===----------------------------------------------------------------------===//
 
 #include "NameClassifier.hpp"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/EnumeratedArray.h"
 //#include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/PointerIntPair.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Demangle/ItaniumDemangle.h"
 #include "llvm/Demangle/MicrosoftDemangle.h"
@@ -28,6 +34,9 @@
 
 using namespace debase_tool;
 using namespace llvm;
+
+#define DEBUG_DUMP 0
+#define DEBUG_DUMP_X DEBUG_DUMP && 0
 
 namespace {
 class ItaniumAllocator {
@@ -50,17 +59,228 @@ public:
 using IDemangler = llvm::itanium_demangle::ManglingParser<ItaniumAllocator>;
 using MDemangler = llvm::ms_demangle::Demangler;
 
+void Classifier::anchor() {}
+
+////////////////////////////////////////////////////////////////////////////////
+// Itanium (gnu)
+
 namespace {
 namespace gnu {
 
 using namespace llvm::itanium_demangle;
+using NodeKind = itanium_demangle::Node::Kind;
 
-static SymbolKind ClassifyFunction(Node* AST, Features* Out, std::string_view Name) {
-  // TODO: Handle
+static constexpr NodeKind NodeKind_LAST =
+  static_cast<NodeKind>(NodeKind::KExplicitObjectParameter + 1u);
+static EnumeratedArray<std::string_view, NodeKind, NodeKind_LAST> NodeKindNames {
+#define NODE(KIND) #KIND,
+#include "llvm/Demangle/ItaniumNodes.def"
+  // Terminator Node
+  "Invalid"
+};
+
+static std::string_view classifyNode(const Node* N) {
+  if (LLVM_UNLIKELY(N == nullptr))
+    return "Invalid";
+  return NodeKindNames[N->getKind()];
+}
+
+static bool IsNamedKind(NodeKind K) {
+  return K == NodeKind::KNestedName || K == NodeKind::KNameType;
+}
+LLVM_ATTRIBUTE_ALWAYS_INLINE static bool IsNamedKind(const Node* N) {
+  assert(N != nullptr);
+  return IsNamedKind(N->getKind());
+}
+
+static bool IsNamedKindEx(NodeKind K) {
+  return IsNamedKind(K) || K == NodeKind::KSpecialName;
+}
+LLVM_ATTRIBUTE_ALWAYS_INLINE static bool IsNamedKindEx(const Node* N) {
+  assert(N != nullptr);
+  return IsNamedKindEx(N->getKind());
+}
+
+static raw_ostream& printNode(const Node* AST, raw_ostream& OS) {
+  assert(AST != nullptr);
   itanium_demangle::OutputBuffer OB;
   AST->print(OB);
-  outs() << Name << ": "
-         << std::string_view(OB) << '\n';
+  return OS << std::string_view(OB);
+}
+
+static void printAST(Node* AST, std::string_view Name, raw_ostream& OS) {
+  assert(AST != nullptr);
+  itanium_demangle::OutputBuffer OB;
+  AST->print(OB);
+  OS << Name << ": " << std::string_view(OB);
+}
+
+static void PrintNestedNameForFeatures(const Node* N, Features& Out, int Depth = 0) {
+#if DEBUG_DUMP_X
+  outs().indent(Depth * 2);
+
+  if (!IsNamedKind(N)) {
+    outs() << "End[" << classifyNode(N) << "]\n";
+    // End recursion?
+    return;
+  }
+
+  if (N->getKind() == NodeKind::KNameType) {
+    auto* Name = static_cast<const NameType*>(N);
+    outs() << "Name\n";
+    outs().indent(Depth * 2 + 1);
+    if (!Name->getName().starts_with('('))
+      outs() << Name->getName() << "\n";
+    else
+      outs() << "`anonymous`" << "\n";
+    return;
+  }
+
+  auto* NName = static_cast<const NestedName*>(N);
+  outs() << "Nest\n";
+  outs().indent(Depth * 2 + 1) << "Left\n";
+    PrintNestedNameForFeatures(NName->Qual, Out, Depth + 1);
+  outs().indent(Depth * 2 + 1) << "Right\n";
+    PrintNestedNameForFeatures(NName->Name, Out, Depth + 1);
+#endif // DEBUG_DUMP_X
+}
+
+static bool AddNestedNameToFeatures(Node* N, SmallVectorImpl<std::string>& Out) {
+  if (N->getKind() == NodeKind::KNameType) {
+    std::string_view Name = static_cast<NameType*>(N)->getName();
+    Out.emplace_back(std::string(Name));
+    return true;
+  } else if (N->getKind() != NodeKind::KNestedName)
+    // Unsupported name type
+    return false;
+
+  auto* Nested = static_cast<NestedName*>(N);
+  if (!AddNestedNameToFeatures(Nested->Qual, Out))
+    return false;
+  //assert(Nested->Name->getKind() == NodeKind::KNameType);
+  //std::string_view Name =
+  //    static_cast<NameType*>(Nested->Name)->getName();
+  //Out.emplace_back(std::string(Name));
+  return AddNestedNameToFeatures(Nested->Name, Out);
+}
+
+static bool AddBaseNameToFeatures(const Node* N, Features& Out) {
+  if (N->getKind() == NodeKind::KNameType) {
+    Out.BaseName = static_cast<const NameType*>(N)->getName();
+    return true;
+  } else if (N->getKind() == NodeKind::KNestedName) {
+    auto* Nested = static_cast<const NestedName*>(N);
+    assert(Nested->Name->getKind() == NodeKind::KNameType);
+    Out.BaseName = static_cast<NameType*>(Nested->Name)->getName();
+    return AddNestedNameToFeatures(Nested->Qual, Out.NestedNames);
+  }
+  // Unsupported type
+  return false;
+}
+
+static SymbolKind ClassifyFunction(
+    Node* ASTVal, Features* Out, std::string_view Name) {
+  if (!ASTVal || !IsNamedKindEx(ASTVal)) {
+#if DEBUG_DUMP
+    if (ASTVal /*&& ASTVal->getKind() != NodeKind::KNameType*/) {
+      outs() << "ErrorType[" << classifyNode(ASTVal) << "]\n  ";
+      printAST(ASTVal, Name, outs());
+      outs() << "\n\n";
+    }
+#endif
+    // Log here? Could be something else of importance.
+    return SymbolKind::Invalid;
+  }
+
+  auto SetSymbol = [Out] (SymbolKind K) {
+    if (Out)
+      Out->SymKind = K;
+    return K;
+  };
+
+  if (ASTVal->getKind() == NodeKind::KNameType) {
+    // Simplest case, none of these functions are interesting...
+#if DEBUG_DUMP_X
+    outs() << "Ignored[" << classifyNode(N) << "]\n  ";
+    printAST(ASTVal, Name, outs());
+    outs() << "\n\n";
+#endif
+    return SetSymbol(SymbolKind::Ignorable);
+  } else if (ASTVal->getKind() == NodeKind::KSpecialName) {
+    auto* SN = static_cast<SpecialName*>(ASTVal);
+    SN->match([&] (std::string_view Special, const Node* Child) {
+#if DEBUG_DUMP
+      printAST(ASTVal, Name, outs());
+      outs() << "\n  Special[" << Special << classifyNode(Child) << "]";
+      outs() << "\n\n";
+#endif
+    });
+    return SetSymbol(SymbolKind::Other);
+  }
+  
+  auto* AST = static_cast<NestedName*>(ASTVal);
+  if (AST->Name->getKind() != NodeKind::KCtorDtorName) {
+#if DEBUG_DUMP_X
+    printAST(AST, Name, outs());
+    outs() << "\n  Qual: " << classifyNode(AST->Qual) << '\n';
+    outs() <<   "  Name: " << classifyNode(AST->Name) << '\n';
+#endif
+    // Simplest case, none of these functions are interesting...
+    return SetSymbol(SymbolKind::Ignorable);
+  }
+
+  auto* CDName = static_cast<CtorDtorName*>(AST->Name);
+  bool DidSucceed = true;
+  CDName->match([Out, &DidSucceed] (const Node* Basename, bool IsDtor, int Variant) {
+    if (Out != nullptr) {
+      DidSucceed = AddBaseNameToFeatures(Basename, *Out);
+      Out->SymKind = IsDtor
+        ? SymbolKind::Destructor
+        : SymbolKind::Constructor;
+      Out->Variant = Variant;
+    }
+  });
+
+  if (LLVM_UNLIKELY(!DidSucceed)) {
+    assert(Out != nullptr && "Wtf");
+#if DEBUG_DUMP
+    outs() << "ErrorType[" << classifyNode(ASTVal) << "]\n  ";
+    printAST(ASTVal, Name, outs());
+    outs() << "\n\n";
+#endif
+    // Encountered some name which isn't supported.
+    Out->clear();
+    return SymbolKind::Invalid;
+  }
+
+  
+  auto DumpInfo = [=] (bool Colors = false) {
+#if DEBUG_DUMP
+    SmallString<128> Buf; {
+      raw_svector_ostream OS(Buf);
+      OS.enable_colors(Colors);
+      printAST(AST, Name, OS);
+      OS << '\n';
+      CDName->match([&OS, Out] (const Node* Basename, bool IsDtor, int Variant) {
+        //OS << "  Base: " << classifyNode(Basename) << '\n';
+        //OS << "    Name: "; printNode(Basename, OS) << '\n';
+        if (Out) {
+          OS << "  Name: ";
+          for (auto& Nested : Out->NestedNames)
+            OS << Nested << "::";
+          OS << Out->BaseName << '\n';
+        }
+        OS << "  Dtor: " << (IsDtor ? "yes" : "no") << '\n';
+        OS << "  Type: " << (IsDtor ? 'D' : 'C') << Variant << '\n';
+      });
+    }
+    outs() << Buf.str() << '\n';
+    if (!Colors)
+      outs().flush();
+#endif
+  };
+
+  DumpInfo();
   return SymbolKind::Invalid;
 }
 
@@ -69,6 +289,8 @@ static SymbolKind ClassifyFunction(Node* AST, Features* Out, std::string_view Na
 
 SymbolKind ItaniumClassifier::classify(const std::string& Sym, Features* Out) {
   using namespace llvm::itanium_demangle;
+  if (Out)
+    Out->clear();
   if (Sym.empty())
     return SymbolKind::Invalid;
   std::string_view SymL = Sym;
@@ -77,12 +299,12 @@ SymbolKind ItaniumClassifier::classify(const std::string& Sym, Features* Out) {
   if (AST == nullptr)
     // Print error?
     return SymbolKind::Invalid;
-  if (true)
-    // TODO: Handle
-    return gnu::ClassifyFunction(AST, Out, Sym);
-  // TODO: Handle
-  return SymbolKind::Invalid;
+  // Determines the type and features of a function.
+  return gnu::ClassifyFunction(AST, Out, Sym);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Microsoft (msvc)
 
 namespace {
 namespace msvc {
@@ -125,6 +347,8 @@ static EnumeratedArray<std::string_view, NodeKind,
 using EmbeddedStringView = llvm::PointerIntPair<std::string_view*, 1, bool>;
 
 static std::string_view classifyNode(Node* N) {
+  if (LLVM_UNLIKELY(N == nullptr))
+    return "Invalid";
   return NodeKindNames[N->kind()];
 }
 
@@ -264,22 +488,10 @@ static std::string GetNamePart(Node* Part) {
   return "!";
 }
 
-static void printAST(FunctionSymbolNode* AST, std::string_view Name) {
-  itanium_demangle::OutputBuffer OB;
-  AST->output(OB, OutputFlags(
-    OF_NoAccessSpecifier    |
-    OF_NoCallingConvention  |
-    OF_NoTagSpecifier       |
-    OF_NoMemberType         |
-    OF_NoReturnType
-  ));
-  outs() << Name << ": " << std::string_view(OB) << '\n';
-}
-
 static void PrintQualName(ArrayRef<Node*> QualName, raw_ostream& OS) {
   SmallVector<std::string_view> NameTypes;
   SmallVector<EmbeddedStringView> NameParts;
-  {
+  /*Get names*/ {
     NameGetter G(NameTypes, NameParts);
     G.addToNameParts(QualName);
   }
@@ -292,65 +504,97 @@ static void PrintQualName(ArrayRef<Node*> QualName, raw_ostream& OS) {
     OS << ' ' << NameType;
     if (Name) {
       std::string_view DtorTok = NamePart.getInt() ? "~" : "";
-      OS << "<" << DtorTok << *Name << ">";
+      OS << '<' << DtorTok << *Name << '>';
     }
   }
-  OS << "\n";
+}
+
+static void printAST(Node* AST, std::string_view Name, raw_ostream& OS) {
+  assert(AST != nullptr);
+  itanium_demangle::OutputBuffer OB;
+  AST->output(OB, OutputFlags(
+    OF_NoAccessSpecifier    |
+    OF_NoCallingConvention  |
+    OF_NoTagSpecifier       |
+    OF_NoMemberType         |
+    OF_NoReturnType
+  ));
+  OS << Name << ": " << std::string_view(OB);
 }
 
 static SymbolKind ClassifyFunction(
- FunctionSymbolNode* AST, Features* Out, std::string_view Name) {
+    Node* ASTVal, Features* Out, std::string_view Name) {
+  if (!ASTVal || ASTVal->kind() == NodeKind::FunctionSymbol)
+    // Log here? Could be something else of importance.
+    return SymbolKind::Invalid;
+  
+  auto* AST = static_cast<FunctionSymbolNode*>(ASTVal);
   auto QualName = GetNodeArray(AST->Name->Components);
   if (QualName.empty()) {
+    // TODO: Check if any of these types could be valid?
     return SymbolKind::Invalid;
   }
   
-#if 1
-  auto DumpInfo = [=] () {
-    printAST(AST, Name);
-    PrintQualName(QualName, outs() << "  |");
-    outs() << '\n';
-  };
+  [[maybe_unused]] auto DumpInfo = [=] (bool Colors = false) {
+#if DEBUG_DUMP
+    SmallString<128> Buf; {
+      raw_svector_ostream OS(Buf);
+      OS.enable_colors(Colors);
+      printAST(AST, Name, OS);
+      OS << "\n  |";
+      PrintQualName(QualName, OS);
+      OS << '\n';
+    }
+    outs() << Buf.str() << '\n';
+    if (!Colors)
+      outs().flush();
 #endif
-
-  if (Out)
-    Out->clear();
+  };
   
   Node* LastNode = QualName.back();
   QualName = QualName.drop_back();
-  if (LastNode->kind() == NodeKind::NamedIdentifier)
-    // Simplest case, none of these functions are interesting...
-    return SymbolKind::Other;
-  else if (LastNode->kind() != NodeKind::StructorIdentifier) {
-    DumpInfo();
-    if (Out) {
-      Out->SymKind  = SymbolKind::Other;
-      Out->BaseName = GetNamePart(LastNode);
-      for (Node* Nested : QualName)
-        Out->NestedNames.push_back(GetNamePart(Nested));
-    }
-    return SymbolKind::Other;
-  }
 
-  StructorIdentifierNode* SID
-    = static_cast<StructorIdentifierNode*>(LastNode);
+  auto WriteFeatures = [&, Out] (const SymbolKind K,
+                                 const std::string_view* BName = nullptr) -> SymbolKind {
+    if (Out != nullptr) {
+      Out->SymKind = K;
+      if (!BName)
+        Out->BaseName = GetNamePart(LastNode);
+      else
+        // Manually specified name pointer.
+        Out->BaseName = *BName;
+      for (Node* Nested : QualName) {
+        assert(Nested != nullptr && "Invalid QualName value?");
+        Out->NestedNames.push_back(GetNamePart(Nested));
+      }
+    }
+#if DEBUG_DUMP
+    DumpInfo();
+#endif
+    return K;
+  };
+
+  if (LastNode->kind() == NodeKind::NamedIdentifier) {
+    // Simplest case, none of these functions are interesting...
+    if (Out)
+      Out->SymKind = SymbolKind::Ignorable;
+    return SymbolKind::Ignorable;
+  } else if (LastNode->kind() != NodeKind::StructorIdentifier)
+    // Some other function type, write it out so we can check?
+    return WriteFeatures(SymbolKind::Other);
+
+  auto* SID = static_cast<StructorIdentifierNode*>(LastNode);
   if (!SID->Class)
     return SymbolKind::Invalid;
   
-  auto EName = NameGetter::GetRealNamePart(SID->Class);
-  auto SymKind = EName.getInt()
+  EmbeddedStringView EName
+    = NameGetter::GetRealNamePart(SID->Class);
+  SymbolKind SymKind = EName.getInt()
     ? SymbolKind::Constructor
     : SymbolKind::Destructor;
-  
-  if (Out) {
-    Out->SymKind  = SymKind;
-    Out->BaseName = *EName.getPointer();
-    for (Node* Nested : QualName)
-      Out->NestedNames.push_back(GetNamePart(Nested));
-  }
 
   //DumpInfo();
-  return SymKind;
+  return WriteFeatures(SymKind, EName.getPointer());
 }
 
 } // namespace msvc
@@ -358,6 +602,8 @@ static SymbolKind ClassifyFunction(
 
 SymbolKind MSVCClassifier::classify(const std::string& Sym, Features* Out) {
   using namespace llvm::ms_demangle;
+  if (Out)
+    Out->clear();
   if (Sym.empty())
     return SymbolKind::Invalid;
   std::string_view SymL = Sym;
@@ -367,10 +613,6 @@ SymbolKind MSVCClassifier::classify(const std::string& Sym, Features* Out) {
     // Print error?
     return SymbolKind::Invalid;
   }
-  if (AST->kind() == NodeKind::FunctionSymbol)
-    return msvc::ClassifyFunction(
-      static_cast<FunctionSymbolNode*>(AST), Out, Sym);
-  return SymbolKind::Invalid;
+  // Determines the type and features of a function.
+  return msvc::ClassifyFunction(AST, Out, Sym);
 }
-
-void Classifier::anchor() {}
