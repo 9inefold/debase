@@ -19,6 +19,7 @@
 #include "Shared.hpp"
 #include "LLVMTargets.hpp"
 #include "NameClassifier.hpp"
+#include "Pattern.hpp"
 #include "Triple.hpp"
 #include "UniqueStringVector.hpp"
 #include "UnlinkRefs.hpp"
@@ -626,6 +627,138 @@ bool DeBaser::debaseDestructor(Function* F) {
   return true;
 }
 
+static StringRef TokName(Pattern::Token::Kind K) {
+  using enum Pattern::Token::Kind;
+  switch (K) {
+  case KSimple:
+    return "Simple";
+  case KAnonymous:
+    return "Anonymous";
+  case KGlob:
+    return "Glob";
+  case KRegex:
+    return "Regex";
+  case KThis:
+    return "This";
+  case KLateBind:
+    return "LateBind";
+  default:
+    llvm_unreachable("invalid Token::Kind");
+  }
+}
+
+static raw_ostream& operator<<(raw_ostream& OS, Pattern::Token Tok) {
+  using enum Pattern::Token::Kind;
+  OS << "<" << TokName(Tok.kind) << ":'";
+  if (Tok.kind == KAnonymous)
+    return OS << "@'>";
+  else if (Tok.kind == KGlob)
+    return OS << "**'>";
+  else
+    return OS << Tok.str() << "'>";
+}
+
+static bool TestLexPattern(StringRef P, const bool ShouldPass, int Indent = 0) {
+  SmallVector<Pattern::Token> Toks;
+  if (Error E = lexTokensForPattern(P, Toks)) {
+    outs().indent(Indent * 2);
+    if (!ShouldPass) {
+      WithColor(outs(), raw_ostream::GREEN)
+        << "pattern '" << P << "' correctly failed!\n";
+    } else {
+      WithColor(outs(), raw_ostream::RED)
+        << "pattern '" << P << "' failed.\n";
+    }
+    outs().indent((Indent + 1) * 2) << toString(std::move(E)) << "\n\n";
+    return !ShouldPass;
+  }
+
+  outs().indent(Indent * 2);
+  if (ShouldPass) {
+    WithColor(outs(), raw_ostream::GREEN)
+      << "pattern '" << P << "' succeeded!\n";
+  } else {
+    WithColor(outs(), raw_ostream::RED)
+      << "pattern '" << P << "' should have failed.\n";
+  }
+
+  outs().indent((Indent + 1) * 2);
+  if (!Toks.empty()) {
+    ListSeparator LS(" :: ");
+    for (Pattern::Token Tok : Toks)
+      outs() << LS << Tok;
+    outs() << "\n\n";
+  } else {
+    outs() << "<empty>\n\n";
+  }
+
+  return ShouldPass;
+}
+
+static bool TestLexGroup(StringRef Name, ArrayRef<std::pair<StringRef, bool>> Patterns) {
+  WithColor(outs(), raw_ostream::YELLOW) << Name << ":\n";
+  bool Result = true;
+  for (auto [P, ShouldPass] : Patterns)
+    if (!TestLexPattern(P, ShouldPass, 1))
+      Result = false;
+  return Result;
+}
+
+#define LEX_TESTS(NAME, ...) [&Result] () {               \
+  std::pair<StringRef, bool> Patterns[] { __VA_ARGS__ };  \
+  Result = TestLexGroup(NAME, Patterns) && Result;        \
+}()
+
+static void RunLexTests() {
+  bool Result = true;
+
+  LEX_TESTS("Simple",
+    {"::foo",       true},
+    {"::a::b::C",   true},
+    {"x :: y :: z", true}
+  );
+  
+  LEX_TESTS("Empty",
+    {"",            false},
+    {"\t",          false},
+    {"  :: ",       false},
+    {"x::",         false},
+    {"x:: ::z",     false}
+  );
+  
+  LEX_TESTS("Standalone",
+    {"@::xyz",      true},
+    {"@::@::bar",   true},
+    {"@",           false},
+    {"::@::**",     true},
+    {"**::xyz",     true},
+    {"::**",        false},
+    {"**::",        false}
+  );
+
+  LEX_TESTS("Replacements",
+    // Config path
+    {"{this}",      true},
+    {"{This.Dir}",  true},
+    {"{thiS.stEm}", true},
+    {"{SELF}",      true},
+    {"{sElF.dir}",  true},
+    {"{seLf.STEM}", true},
+    // Input path
+    {"{file}",      true},
+    {"{input.diR}", true},
+    {"{filE.Stem}", true},
+    {"{fILe.sTEm}", true},
+    // Invalid
+    {"{ \t  }",     false},
+    {"{.stem}",     false},
+    {"{@.stem}",    false},
+    {"{this.@}",    false},
+  );
+
+  std::exit(Result ? 0 : 1);
+}
+
 int main(int Argc, char** Argv) {
   InitLLVM X(Argc, Argv);
   LLVMInitializeEverything();
@@ -644,6 +777,8 @@ int main(int Argc, char** Argv) {
 
   cl::ParseCommandLineOptions(Argc, Argv,
     "llvmir pass that removes calls to bases in ctors/dtors.\n");
+  
+  RunLexTests();
   
   LLVMContext Context;
 
