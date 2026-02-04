@@ -21,9 +21,9 @@ ClassX::ClassX() : Class() {
   __debase_ctor_end();
 }
 
-x::Class::Class() : IClass() {
+x::ns::Class::Class() : IClass() {
   __debase_ctor_begin();
-  std::printf("x::Class!\n");
+  std::printf("x::ns::Class!\n");
   __debase_ctor_end();
 }
 
@@ -49,9 +49,9 @@ ClassX::~ClassX() {
   __debase_dtor_end();
 }
 
-x::Class::~Class() {
+x::ns::Class::~Class() {
   __debase_dtor_begin();
-  std::printf("~x::Class!\n");
+  std::printf("~x::ns::Class!\n");
   __debase_dtor_end();
 }
 

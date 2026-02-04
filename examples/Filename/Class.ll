@@ -20,21 +20,21 @@ $_ZTS6ClassX = comdat any
 
 $_ZTI6ClassX = comdat any
 
-$_ZTSN1x5ClassE = comdat any
+$_ZTSN1x2ns5ClassE = comdat any
 
-$_ZTIN1x5ClassE = comdat any
+$_ZTIN1x2ns5ClassE = comdat any
 
 @_ZTV5Class = dso_local unnamed_addr constant { [4 x ptr] } { [4 x ptr] [ptr null, ptr @_ZTI5Class, ptr @_ZN5ClassD1Ev, ptr @_ZN5ClassD0Ev] }, align 8
 @.str = private unnamed_addr constant [8 x i8] c"Class!\0A\00", align 1, !dbg !0
 @_ZTV6ClassX = dso_local unnamed_addr constant { [4 x ptr] } { [4 x ptr] [ptr null, ptr @_ZTI6ClassX, ptr @_ZN6ClassXD1Ev, ptr @_ZN6ClassXD0Ev] }, align 8
 @.str.1 = private unnamed_addr constant [9 x i8] c"ClassX!\0A\00", align 1, !dbg !8
-@_ZTVN1x5ClassE = dso_local unnamed_addr constant { [4 x ptr] } { [4 x ptr] [ptr null, ptr @_ZTIN1x5ClassE, ptr @_ZN1x5ClassD1Ev, ptr @_ZN1x5ClassD0Ev] }, align 8
-@.str.2 = private unnamed_addr constant [11 x i8] c"x::Class!\0A\00", align 1, !dbg !13
+@_ZTVN1x2ns5ClassE = dso_local unnamed_addr constant { [4 x ptr] } { [4 x ptr] [ptr null, ptr @_ZTIN1x2ns5ClassE, ptr @_ZN1x2ns5ClassD1Ev, ptr @_ZN1x2ns5ClassD0Ev] }, align 8
+@.str.2 = private unnamed_addr constant [15 x i8] c"x::ns::Class!\0A\00", align 1, !dbg !13
 @_ZTV6IClass = dso_local unnamed_addr constant { [4 x ptr] } { [4 x ptr] [ptr null, ptr @_ZTI6IClass, ptr @_ZN6IClassD1Ev, ptr @_ZN6IClassD0Ev] }, align 8
 @.str.3 = private unnamed_addr constant [10 x i8] c"~IClass!\0A\00", align 1, !dbg !18
 @.str.4 = private unnamed_addr constant [9 x i8] c"~Class!\0A\00", align 1, !dbg !23
 @.str.5 = private unnamed_addr constant [10 x i8] c"~ClassX!\0A\00", align 1, !dbg !25
-@.str.6 = private unnamed_addr constant [12 x i8] c"~x::Class!\0A\00", align 1, !dbg !27
+@.str.6 = private unnamed_addr constant [16 x i8] c"~x::ns::Class!\0A\00", align 1, !dbg !27
 @_ZTVN10__cxxabiv117__class_type_infoE = external global [0 x ptr]
 @_ZTS6IClass = linkonce_odr dso_local constant [8 x i8] c"6IClass\00", comdat, align 1
 @_ZTI6IClass = linkonce_odr dso_local constant { ptr, ptr } { ptr getelementptr inbounds (ptr, ptr @_ZTVN10__cxxabiv117__class_type_infoE, i64 2), ptr @_ZTS6IClass }, comdat, align 8
@@ -43,8 +43,8 @@ $_ZTIN1x5ClassE = comdat any
 @_ZTI5Class = linkonce_odr dso_local constant { ptr, ptr, ptr } { ptr getelementptr inbounds (ptr, ptr @_ZTVN10__cxxabiv120__si_class_type_infoE, i64 2), ptr @_ZTS5Class, ptr @_ZTI6IClass }, comdat, align 8
 @_ZTS6ClassX = linkonce_odr dso_local constant [8 x i8] c"6ClassX\00", comdat, align 1
 @_ZTI6ClassX = linkonce_odr dso_local constant { ptr, ptr, ptr } { ptr getelementptr inbounds (ptr, ptr @_ZTVN10__cxxabiv120__si_class_type_infoE, i64 2), ptr @_ZTS6ClassX, ptr @_ZTI5Class }, comdat, align 8
-@_ZTSN1x5ClassE = linkonce_odr dso_local constant [11 x i8] c"N1x5ClassE\00", comdat, align 1
-@_ZTIN1x5ClassE = linkonce_odr dso_local constant { ptr, ptr, ptr } { ptr getelementptr inbounds (ptr, ptr @_ZTVN10__cxxabiv120__si_class_type_infoE, i64 2), ptr @_ZTSN1x5ClassE, ptr @_ZTI6IClass }, comdat, align 8
+@_ZTSN1x2ns5ClassE = linkonce_odr dso_local constant [14 x i8] c"N1x2ns5ClassE\00", comdat, align 1
+@_ZTIN1x2ns5ClassE = linkonce_odr dso_local constant { ptr, ptr, ptr } { ptr getelementptr inbounds (ptr, ptr @_ZTVN10__cxxabiv120__si_class_type_infoE, i64 2), ptr @_ZTSN1x2ns5ClassE, ptr @_ZTI6IClass }, comdat, align 8
 @_ZTVN12_GLOBAL__N_19ClassAnonE = internal unnamed_addr constant { [4 x ptr] } { [4 x ptr] [ptr null, ptr @_ZTIN12_GLOBAL__N_19ClassAnonE, ptr @_ZN12_GLOBAL__N_19ClassAnonD2Ev, ptr @_ZN12_GLOBAL__N_19ClassAnonD0Ev] }, align 8
 @.str.7 = private unnamed_addr constant [19 x i8] c"Class`anonymous`!\0A\00", align 1, !dbg !32
 @_ZTSN12_GLOBAL__N_19ClassAnonE = internal constant [27 x i8] c"N12_GLOBAL__N_19ClassAnonE\00", align 1
@@ -53,11 +53,11 @@ $_ZTIN1x5ClassE = comdat any
 
 @_ZN5ClassC1Ev = dso_local unnamed_addr alias void (ptr), ptr @_ZN5ClassC2Ev
 @_ZN6ClassXC1Ev = dso_local unnamed_addr alias void (ptr), ptr @_ZN6ClassXC2Ev
-@_ZN1x5ClassC1Ev = dso_local unnamed_addr alias void (ptr), ptr @_ZN1x5ClassC2Ev
+@_ZN1x2ns5ClassC1Ev = dso_local unnamed_addr alias void (ptr), ptr @_ZN1x2ns5ClassC2Ev
 @_ZN6IClassD1Ev = dso_local unnamed_addr alias void (ptr), ptr @_ZN6IClassD2Ev
 @_ZN5ClassD1Ev = dso_local unnamed_addr alias void (ptr), ptr @_ZN5ClassD2Ev
 @_ZN6ClassXD1Ev = dso_local unnamed_addr alias void (ptr), ptr @_ZN6ClassXD2Ev
-@_ZN1x5ClassD1Ev = dso_local unnamed_addr alias void (ptr), ptr @_ZN1x5ClassD2Ev
+@_ZN1x2ns5ClassD1Ev = dso_local unnamed_addr alias void (ptr), ptr @_ZN1x2ns5ClassD2Ev
 
 ; Function Attrs: mustprogress noinline optnone uwtable
 define dso_local void @_ZN5ClassC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !245 {
@@ -205,41 +205,41 @@ define dso_local void @_ZN5ClassD2Ev(ptr noundef nonnull align 8 dereferenceable
 }
 
 ; Function Attrs: mustprogress noinline optnone uwtable
-define dso_local void @_ZN1x5ClassC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !319 {
+define dso_local void @_ZN1x2ns5ClassC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !319 {
   %2 = alloca ptr, align 8
   %3 = alloca ptr, align 8
   %4 = alloca i32, align 4
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !329, metadata !DIExpression()), !dbg !331
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !330, metadata !DIExpression()), !dbg !332
   %5 = load ptr, ptr %2, align 8
-  %6 = getelementptr inbounds i8, ptr %5, i64 0, !dbg !332
-  call void @llvm.memset.p0.i64(ptr align 8 %6, i8 0, i64 8, i1 false), !dbg !332
-  call void @_ZN6IClassC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %5) #9, !dbg !332
-  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTVN1x5ClassE, i32 0, inrange i32 0, i32 2), ptr %5, align 8, !dbg !333
-  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !334
+  %6 = getelementptr inbounds i8, ptr %5, i64 0, !dbg !333
+  call void @llvm.memset.p0.i64(ptr align 8 %6, i8 0, i64 8, i1 false), !dbg !333
+  call void @_ZN6IClassC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %5) #9, !dbg !333
+  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTVN1x2ns5ClassE, i32 0, inrange i32 0, i32 2), ptr %5, align 8, !dbg !334
+  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !335
   %7 = invoke i32 (ptr, ...) @printf(ptr noundef @.str.2)
-          to label %8 unwind label %9, !dbg !336
+          to label %8 unwind label %9, !dbg !337
 
 8:                                                ; preds = %1
-  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !337
-  ret void, !dbg !338
+  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !338
+  ret void, !dbg !339
 
 9:                                                ; preds = %1
   %10 = landingpad { ptr, i32 }
-          cleanup, !dbg !339
-  %11 = extractvalue { ptr, i32 } %10, 0, !dbg !339
-  store ptr %11, ptr %3, align 8, !dbg !339
-  %12 = extractvalue { ptr, i32 } %10, 1, !dbg !339
-  store i32 %12, ptr %4, align 4, !dbg !339
-  call void @_ZN6IClassD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %5) #9, !dbg !339
-  br label %13, !dbg !339
+          cleanup, !dbg !340
+  %11 = extractvalue { ptr, i32 } %10, 0, !dbg !340
+  store ptr %11, ptr %3, align 8, !dbg !340
+  %12 = extractvalue { ptr, i32 } %10, 1, !dbg !340
+  store i32 %12, ptr %4, align 4, !dbg !340
+  call void @_ZN6IClassD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %5) #9, !dbg !340
+  br label %13, !dbg !340
 
 13:                                               ; preds = %9
-  %14 = load ptr, ptr %3, align 8, !dbg !339
-  %15 = load i32, ptr %4, align 4, !dbg !339
-  %16 = insertvalue { ptr, i32 } poison, ptr %14, 0, !dbg !339
-  %17 = insertvalue { ptr, i32 } %16, i32 %15, 1, !dbg !339
-  resume { ptr, i32 } %17, !dbg !339
+  %14 = load ptr, ptr %3, align 8, !dbg !340
+  %15 = load i32, ptr %4, align 4, !dbg !340
+  %16 = insertvalue { ptr, i32 } poison, ptr %14, 0, !dbg !340
+  %17 = insertvalue { ptr, i32 } %16, i32 %15, 1, !dbg !340
+  resume { ptr, i32 } %17, !dbg !340
 }
 
 ; Function Attrs: noinline noreturn nounwind uwtable
@@ -254,224 +254,224 @@ declare dso_local ptr @__cxa_begin_catch(ptr)
 declare dso_local void @_ZSt9terminatev()
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN6IClassD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !340 {
+define dso_local void @_ZN6IClassD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !341 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !341, metadata !DIExpression()), !dbg !342
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !342, metadata !DIExpression()), !dbg !343
   %3 = load ptr, ptr %2, align 8
-  call void @_ZN6IClassD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !343
-  call void @_ZdlPv(ptr noundef %3) #11, !dbg !343
-  ret void, !dbg !344
+  call void @_ZN6IClassD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !344
+  call void @_ZdlPv(ptr noundef %3) #11, !dbg !344
+  ret void, !dbg !345
 }
 
 ; Function Attrs: nobuiltin nounwind
 declare dso_local void @_ZdlPv(ptr noundef) #7
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN5ClassD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !345 {
+define dso_local void @_ZN5ClassD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !346 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !346, metadata !DIExpression()), !dbg !347
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !347, metadata !DIExpression()), !dbg !348
   %3 = load ptr, ptr %2, align 8
-  call void @_ZN5ClassD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !348
-  call void @_ZdlPv(ptr noundef %3) #11, !dbg !348
-  ret void, !dbg !349
+  call void @_ZN5ClassD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !349
+  call void @_ZdlPv(ptr noundef %3) #11, !dbg !349
+  ret void, !dbg !350
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN6ClassXD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 personality ptr @__gxx_personality_seh0 !dbg !350 {
+define dso_local void @_ZN6ClassXD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 personality ptr @__gxx_personality_seh0 !dbg !351 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !351, metadata !DIExpression()), !dbg !352
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !352, metadata !DIExpression()), !dbg !353
   %3 = load ptr, ptr %2, align 8
-  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV6ClassX, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !353
-  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !354
+  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTV6ClassX, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !354
+  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !355
   %4 = invoke i32 (ptr, ...) @printf(ptr noundef @.str.5)
-          to label %5 unwind label %6, !dbg !356
+          to label %5 unwind label %6, !dbg !357
 
 5:                                                ; preds = %1
-  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !357
-  call void @_ZN5ClassD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !358
-  ret void, !dbg !359
+  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !358
+  call void @_ZN5ClassD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !359
+  ret void, !dbg !360
 
 6:                                                ; preds = %1
   %7 = landingpad { ptr, i32 }
-          catch ptr null, !dbg !356
-  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !356
-  call void @__clang_call_terminate(ptr %8) #10, !dbg !356
-  unreachable, !dbg !356
+          catch ptr null, !dbg !357
+  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !357
+  call void @__clang_call_terminate(ptr %8) #10, !dbg !357
+  unreachable, !dbg !357
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN6ClassXD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !360 {
+define dso_local void @_ZN6ClassXD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !361 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !361, metadata !DIExpression()), !dbg !362
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !362, metadata !DIExpression()), !dbg !363
   %3 = load ptr, ptr %2, align 8
-  call void @_ZN6ClassXD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !363
-  call void @_ZdlPv(ptr noundef %3) #11, !dbg !363
-  ret void, !dbg !364
+  call void @_ZN6ClassXD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !364
+  call void @_ZdlPv(ptr noundef %3) #11, !dbg !364
+  ret void, !dbg !365
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN1x5ClassD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 personality ptr @__gxx_personality_seh0 !dbg !365 {
+define dso_local void @_ZN1x2ns5ClassD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 personality ptr @__gxx_personality_seh0 !dbg !366 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !366, metadata !DIExpression()), !dbg !367
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !367, metadata !DIExpression()), !dbg !368
   %3 = load ptr, ptr %2, align 8
-  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTVN1x5ClassE, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !368
-  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !369
+  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTVN1x2ns5ClassE, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !369
+  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !370
   %4 = invoke i32 (ptr, ...) @printf(ptr noundef @.str.6)
-          to label %5 unwind label %6, !dbg !371
+          to label %5 unwind label %6, !dbg !372
 
 5:                                                ; preds = %1
-  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !372
-  call void @_ZN6IClassD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !373
-  ret void, !dbg !374
+  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !373
+  call void @_ZN6IClassD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !374
+  ret void, !dbg !375
 
 6:                                                ; preds = %1
   %7 = landingpad { ptr, i32 }
-          catch ptr null, !dbg !371
-  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !371
-  call void @__clang_call_terminate(ptr %8) #10, !dbg !371
-  unreachable, !dbg !371
+          catch ptr null, !dbg !372
+  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !372
+  call void @__clang_call_terminate(ptr %8) #10, !dbg !372
+  unreachable, !dbg !372
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_ZN1x5ClassD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !375 {
+define dso_local void @_ZN1x2ns5ClassD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !376 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !376, metadata !DIExpression()), !dbg !377
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !377, metadata !DIExpression()), !dbg !378
   %3 = load ptr, ptr %2, align 8
-  call void @_ZN1x5ClassD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !378
-  call void @_ZdlPv(ptr noundef %3) #11, !dbg !378
-  ret void, !dbg !379
+  call void @_ZN1x2ns5ClassD1Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !379
+  call void @_ZdlPv(ptr noundef %3) #11, !dbg !379
+  ret void, !dbg !380
 }
 
 ; Function Attrs: mustprogress noinline optnone uwtable
-define dso_local noundef ptr @_Z8getClassv() #0 personality ptr @__gxx_personality_seh0 !dbg !380 {
+define dso_local noundef ptr @_Z8getClassv() #0 personality ptr @__gxx_personality_seh0 !dbg !381 {
   %1 = alloca ptr, align 8
   %2 = alloca i32, align 4
-  %3 = call noalias noundef nonnull ptr @_Znwy(i64 noundef 8) #12, !dbg !383, !heapallocsite !384
+  %3 = call noalias noundef nonnull ptr @_Znwy(i64 noundef 8) #12, !dbg !384, !heapallocsite !385
   invoke void @_ZN12_GLOBAL__N_19ClassAnonC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3)
-          to label %4 unwind label %5, !dbg !393
+          to label %4 unwind label %5, !dbg !394
 
 4:                                                ; preds = %0
-  ret ptr %3, !dbg !394
+  ret ptr %3, !dbg !395
 
 5:                                                ; preds = %0
   %6 = landingpad { ptr, i32 }
-          cleanup, !dbg !395
-  %7 = extractvalue { ptr, i32 } %6, 0, !dbg !395
-  store ptr %7, ptr %1, align 8, !dbg !395
-  %8 = extractvalue { ptr, i32 } %6, 1, !dbg !395
-  store i32 %8, ptr %2, align 4, !dbg !395
-  call void @_ZdlPv(ptr noundef %3) #11, !dbg !383
-  br label %9, !dbg !383
+          cleanup, !dbg !396
+  %7 = extractvalue { ptr, i32 } %6, 0, !dbg !396
+  store ptr %7, ptr %1, align 8, !dbg !396
+  %8 = extractvalue { ptr, i32 } %6, 1, !dbg !396
+  store i32 %8, ptr %2, align 4, !dbg !396
+  call void @_ZdlPv(ptr noundef %3) #11, !dbg !384
+  br label %9, !dbg !384
 
 9:                                                ; preds = %5
-  %10 = load ptr, ptr %1, align 8, !dbg !383
-  %11 = load i32, ptr %2, align 4, !dbg !383
-  %12 = insertvalue { ptr, i32 } poison, ptr %10, 0, !dbg !383
-  %13 = insertvalue { ptr, i32 } %12, i32 %11, 1, !dbg !383
-  resume { ptr, i32 } %13, !dbg !383
+  %10 = load ptr, ptr %1, align 8, !dbg !384
+  %11 = load i32, ptr %2, align 4, !dbg !384
+  %12 = insertvalue { ptr, i32 } poison, ptr %10, 0, !dbg !384
+  %13 = insertvalue { ptr, i32 } %12, i32 %11, 1, !dbg !384
+  resume { ptr, i32 } %13, !dbg !384
 }
 
 ; Function Attrs: nobuiltin allocsize(0)
 declare dso_local noundef nonnull ptr @_Znwy(i64 noundef) #8
 
 ; Function Attrs: mustprogress noinline optnone uwtable
-define internal void @_ZN12_GLOBAL__N_19ClassAnonC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !396 {
+define internal void @_ZN12_GLOBAL__N_19ClassAnonC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #0 align 2 personality ptr @__gxx_personality_seh0 !dbg !397 {
   %2 = alloca ptr, align 8
   %3 = alloca ptr, align 8
   %4 = alloca i32, align 4
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !397, metadata !DIExpression()), !dbg !399
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !398, metadata !DIExpression()), !dbg !400
   %5 = load ptr, ptr %2, align 8
-  call void @_ZN6ClassXC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %5), !dbg !400
-  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTVN12_GLOBAL__N_19ClassAnonE, i32 0, inrange i32 0, i32 2), ptr %5, align 8, !dbg !401
-  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !402
+  call void @_ZN6ClassXC2Ev(ptr noundef nonnull align 8 dereferenceable(8) %5), !dbg !401
+  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTVN12_GLOBAL__N_19ClassAnonE, i32 0, inrange i32 0, i32 2), ptr %5, align 8, !dbg !402
+  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !403
   %6 = invoke i32 (ptr, ...) @printf(ptr noundef @.str.7)
-          to label %7 unwind label %8, !dbg !404
+          to label %7 unwind label %8, !dbg !405
 
 7:                                                ; preds = %1
-  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !405
-  ret void, !dbg !406
+  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !406
+  ret void, !dbg !407
 
 8:                                                ; preds = %1
   %9 = landingpad { ptr, i32 }
-          cleanup, !dbg !407
-  %10 = extractvalue { ptr, i32 } %9, 0, !dbg !407
-  store ptr %10, ptr %3, align 8, !dbg !407
-  %11 = extractvalue { ptr, i32 } %9, 1, !dbg !407
-  store i32 %11, ptr %4, align 4, !dbg !407
-  call void @_ZN6ClassXD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %5) #9, !dbg !407
-  br label %12, !dbg !407
+          cleanup, !dbg !408
+  %10 = extractvalue { ptr, i32 } %9, 0, !dbg !408
+  store ptr %10, ptr %3, align 8, !dbg !408
+  %11 = extractvalue { ptr, i32 } %9, 1, !dbg !408
+  store i32 %11, ptr %4, align 4, !dbg !408
+  call void @_ZN6ClassXD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %5) #9, !dbg !408
+  br label %12, !dbg !408
 
 12:                                               ; preds = %8
-  %13 = load ptr, ptr %3, align 8, !dbg !407
-  %14 = load i32, ptr %4, align 4, !dbg !407
-  %15 = insertvalue { ptr, i32 } poison, ptr %13, 0, !dbg !407
-  %16 = insertvalue { ptr, i32 } %15, i32 %14, 1, !dbg !407
-  resume { ptr, i32 } %16, !dbg !407
+  %13 = load ptr, ptr %3, align 8, !dbg !408
+  %14 = load i32, ptr %4, align 4, !dbg !408
+  %15 = insertvalue { ptr, i32 } poison, ptr %13, 0, !dbg !408
+  %16 = insertvalue { ptr, i32 } %15, i32 %14, 1, !dbg !408
+  resume { ptr, i32 } %16, !dbg !408
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define dso_local void @_Z11deleteClassRP6IClass(ptr noundef nonnull align 8 dereferenceable(8) %0) #3 !dbg !408 {
+define dso_local void @_Z11deleteClassRP6IClass(ptr noundef nonnull align 8 dereferenceable(8) %0) #3 !dbg !409 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !412, metadata !DIExpression()), !dbg !413
-  %3 = load ptr, ptr %2, align 8, !dbg !414
-  %4 = load ptr, ptr %3, align 8, !dbg !414
-  %5 = icmp eq ptr %4, null, !dbg !415
-  br i1 %5, label %10, label %6, !dbg !415
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !413, metadata !DIExpression()), !dbg !414
+  %3 = load ptr, ptr %2, align 8, !dbg !415
+  %4 = load ptr, ptr %3, align 8, !dbg !415
+  %5 = icmp eq ptr %4, null, !dbg !416
+  br i1 %5, label %10, label %6, !dbg !416
 
 6:                                                ; preds = %1
-  %7 = load ptr, ptr %4, align 8, !dbg !415
-  %8 = getelementptr inbounds ptr, ptr %7, i64 1, !dbg !415
-  %9 = load ptr, ptr %8, align 8, !dbg !415
-  call void %9(ptr noundef nonnull align 8 dereferenceable(8) %4) #9, !dbg !415
-  br label %10, !dbg !415
+  %7 = load ptr, ptr %4, align 8, !dbg !416
+  %8 = getelementptr inbounds ptr, ptr %7, i64 1, !dbg !416
+  %9 = load ptr, ptr %8, align 8, !dbg !416
+  call void %9(ptr noundef nonnull align 8 dereferenceable(8) %4) #9, !dbg !416
+  br label %10, !dbg !416
 
 10:                                               ; preds = %6, %1
-  %11 = load ptr, ptr %2, align 8, !dbg !416
-  store ptr null, ptr %11, align 8, !dbg !417
-  ret void, !dbg !418
+  %11 = load ptr, ptr %2, align 8, !dbg !417
+  store ptr null, ptr %11, align 8, !dbg !418
+  ret void, !dbg !419
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define internal void @_ZN12_GLOBAL__N_19ClassAnonD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 personality ptr @__gxx_personality_seh0 !dbg !419 {
+define internal void @_ZN12_GLOBAL__N_19ClassAnonD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 personality ptr @__gxx_personality_seh0 !dbg !420 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !420, metadata !DIExpression()), !dbg !421
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !421, metadata !DIExpression()), !dbg !422
   %3 = load ptr, ptr %2, align 8
-  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTVN12_GLOBAL__N_19ClassAnonE, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !422
-  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !423
+  store ptr getelementptr inbounds ({ [4 x ptr] }, ptr @_ZTVN12_GLOBAL__N_19ClassAnonE, i32 0, inrange i32 0, i32 2), ptr %3, align 8, !dbg !423
+  notail call preserve_mostcc void @__debase_mark_begin() #9, !dbg !424
   %4 = invoke i32 (ptr, ...) @printf(ptr noundef @.str.8)
-          to label %5 unwind label %6, !dbg !425
+          to label %5 unwind label %6, !dbg !426
 
 5:                                                ; preds = %1
-  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !426
-  call void @_ZN6ClassXD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !427
-  ret void, !dbg !428
+  notail call preserve_mostcc void @__debase_mark_end() #9, !dbg !427
+  call void @_ZN6ClassXD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !428
+  ret void, !dbg !429
 
 6:                                                ; preds = %1
   %7 = landingpad { ptr, i32 }
-          catch ptr null, !dbg !425
-  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !425
-  call void @__clang_call_terminate(ptr %8) #10, !dbg !425
-  unreachable, !dbg !425
+          catch ptr null, !dbg !426
+  %8 = extractvalue { ptr, i32 } %7, 0, !dbg !426
+  call void @__clang_call_terminate(ptr %8) #10, !dbg !426
+  unreachable, !dbg !426
 }
 
 ; Function Attrs: mustprogress noinline nounwind optnone uwtable
-define internal void @_ZN12_GLOBAL__N_19ClassAnonD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !429 {
+define internal void @_ZN12_GLOBAL__N_19ClassAnonD0Ev(ptr noundef nonnull align 8 dereferenceable(8) %0) unnamed_addr #3 align 2 !dbg !430 {
   %2 = alloca ptr, align 8
   store ptr %0, ptr %2, align 8
-  call void @llvm.dbg.declare(metadata ptr %2, metadata !430, metadata !DIExpression()), !dbg !431
+  call void @llvm.dbg.declare(metadata ptr %2, metadata !431, metadata !DIExpression()), !dbg !432
   %3 = load ptr, ptr %2, align 8
-  call void @_ZN12_GLOBAL__N_19ClassAnonD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !432
-  call void @_ZdlPv(ptr noundef %3) #11, !dbg !432
-  ret void, !dbg !433
+  call void @_ZN12_GLOBAL__N_19ClassAnonD2Ev(ptr noundef nonnull align 8 dereferenceable(8) %3) #9, !dbg !433
+  call void @_ZdlPv(ptr noundef %3) #11, !dbg !433
+  ret void, !dbg !434
 }
 
 attributes #0 = { mustprogress noinline optnone uwtable "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
@@ -507,9 +507,9 @@ attributes #12 = { builtin allocsize(0) }
 !12 = !DISubrange(count: 9)
 !13 = !DIGlobalVariableExpression(var: !14, expr: !DIExpression())
 !14 = distinct !DIGlobalVariable(scope: null, file: !2, line: 26, type: !15, isLocal: true, isDefinition: true)
-!15 = !DICompositeType(tag: DW_TAG_array_type, baseType: !4, size: 88, elements: !16)
+!15 = !DICompositeType(tag: DW_TAG_array_type, baseType: !4, size: 120, elements: !16)
 !16 = !{!17}
-!17 = !DISubrange(count: 11)
+!17 = !DISubrange(count: 15)
 !18 = !DIGlobalVariableExpression(var: !19, expr: !DIExpression())
 !19 = distinct !DIGlobalVariable(scope: null, file: !2, line: 37, type: !20, isLocal: true, isDefinition: true)
 !20 = !DICompositeType(tag: DW_TAG_array_type, baseType: !4, size: 80, elements: !21)
@@ -521,9 +521,9 @@ attributes #12 = { builtin allocsize(0) }
 !26 = distinct !DIGlobalVariable(scope: null, file: !2, line: 48, type: !20, isLocal: true, isDefinition: true)
 !27 = !DIGlobalVariableExpression(var: !28, expr: !DIExpression())
 !28 = distinct !DIGlobalVariable(scope: null, file: !2, line: 54, type: !29, isLocal: true, isDefinition: true)
-!29 = !DICompositeType(tag: DW_TAG_array_type, baseType: !4, size: 96, elements: !30)
+!29 = !DICompositeType(tag: DW_TAG_array_type, baseType: !4, size: 128, elements: !30)
 !30 = !{!31}
-!31 = !DISubrange(count: 12)
+!31 = !DISubrange(count: 16)
 !32 = !DIGlobalVariableExpression(var: !33, expr: !DIExpression())
 !33 = distinct !DIGlobalVariable(scope: null, file: !2, line: 32, type: !34, isLocal: true, isDefinition: true)
 !34 = !DICompositeType(tag: DW_TAG_array_type, baseType: !4, size: 152, elements: !35)
@@ -811,118 +811,119 @@ attributes #12 = { builtin allocsize(0) }
 !316 = !DILocation(line: 43, column: 3, scope: !314)
 !317 = !DILocation(line: 44, column: 1, scope: !314)
 !318 = !DILocation(line: 44, column: 1, scope: !309)
-!319 = distinct !DISubprogram(name: "Class", linkageName: "_ZN1x5ClassC2Ev", scope: !320, file: !2, line: 24, type: !325, scopeLine: 24, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !324, retainedNodes: !265)
-!320 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "Class", scope: !321, file: !247, line: 19, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !322, vtableHolder: !250)
-!321 = !DINamespace(name: "x", scope: null)
-!322 = !{!323, !324, !328}
-!323 = !DIDerivedType(tag: DW_TAG_inheritance, scope: !320, baseType: !250, extraData: i32 0)
-!324 = !DISubprogram(name: "Class", scope: !320, file: !247, line: 20, type: !325, scopeLine: 20, flags: DIFlagPrototyped, spFlags: 0)
-!325 = !DISubroutineType(types: !326)
-!326 = !{null, !327}
-!327 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !320, size: 64, flags: DIFlagArtificial | DIFlagObjectPointer)
-!328 = !DISubprogram(name: "~Class", scope: !320, file: !247, line: 21, type: !325, scopeLine: 21, containingType: !320, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual)
-!329 = !DILocalVariable(name: "this", arg: 1, scope: !319, type: !330, flags: DIFlagArtificial | DIFlagObjectPointer)
-!330 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !320, size: 64)
-!331 = !DILocation(line: 0, scope: !319)
-!332 = !DILocation(line: 24, column: 21, scope: !319)
-!333 = !DILocation(line: 24, column: 30, scope: !319)
-!334 = !DILocation(line: 25, column: 3, scope: !335)
-!335 = distinct !DILexicalBlock(scope: !319, file: !2, line: 24, column: 30)
-!336 = !DILocation(line: 26, column: 3, scope: !335)
-!337 = !DILocation(line: 27, column: 3, scope: !335)
-!338 = !DILocation(line: 28, column: 1, scope: !319)
-!339 = !DILocation(line: 28, column: 1, scope: !335)
-!340 = distinct !DISubprogram(name: "~IClass", linkageName: "_ZN6IClassD0Ev", scope: !250, file: !2, line: 36, type: !256, scopeLine: 36, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !259, retainedNodes: !265)
-!341 = !DILocalVariable(name: "this", arg: 1, scope: !340, type: !279, flags: DIFlagArtificial | DIFlagObjectPointer)
-!342 = !DILocation(line: 0, scope: !340)
-!343 = !DILocation(line: 36, column: 19, scope: !340)
-!344 = !DILocation(line: 38, column: 1, scope: !340)
-!345 = distinct !DISubprogram(name: "~Class", linkageName: "_ZN5ClassD0Ev", scope: !246, file: !2, line: 40, type: !261, scopeLine: 40, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !264, retainedNodes: !265)
-!346 = !DILocalVariable(name: "this", arg: 1, scope: !345, type: !267, flags: DIFlagArtificial | DIFlagObjectPointer)
-!347 = !DILocation(line: 0, scope: !345)
-!348 = !DILocation(line: 40, column: 17, scope: !345)
-!349 = !DILocation(line: 44, column: 1, scope: !345)
-!350 = distinct !DISubprogram(name: "~ClassX", linkageName: "_ZN6ClassXD2Ev", scope: !290, file: !2, line: 46, type: !294, scopeLine: 46, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !297, retainedNodes: !265)
-!351 = !DILocalVariable(name: "this", arg: 1, scope: !350, type: !299, flags: DIFlagArtificial | DIFlagObjectPointer)
-!352 = !DILocation(line: 0, scope: !350)
-!353 = !DILocation(line: 46, column: 19, scope: !350)
-!354 = !DILocation(line: 47, column: 3, scope: !355)
-!355 = distinct !DILexicalBlock(scope: !350, file: !2, line: 46, column: 19)
-!356 = !DILocation(line: 48, column: 3, scope: !355)
-!357 = !DILocation(line: 49, column: 3, scope: !355)
-!358 = !DILocation(line: 50, column: 1, scope: !355)
-!359 = !DILocation(line: 50, column: 1, scope: !350)
-!360 = distinct !DISubprogram(name: "~ClassX", linkageName: "_ZN6ClassXD0Ev", scope: !290, file: !2, line: 46, type: !294, scopeLine: 46, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !297, retainedNodes: !265)
-!361 = !DILocalVariable(name: "this", arg: 1, scope: !360, type: !299, flags: DIFlagArtificial | DIFlagObjectPointer)
-!362 = !DILocation(line: 0, scope: !360)
-!363 = !DILocation(line: 46, column: 19, scope: !360)
-!364 = !DILocation(line: 50, column: 1, scope: !360)
-!365 = distinct !DISubprogram(name: "~Class", linkageName: "_ZN1x5ClassD2Ev", scope: !320, file: !2, line: 52, type: !325, scopeLine: 52, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !328, retainedNodes: !265)
-!366 = !DILocalVariable(name: "this", arg: 1, scope: !365, type: !330, flags: DIFlagArtificial | DIFlagObjectPointer)
-!367 = !DILocation(line: 0, scope: !365)
-!368 = !DILocation(line: 52, column: 20, scope: !365)
-!369 = !DILocation(line: 53, column: 3, scope: !370)
-!370 = distinct !DILexicalBlock(scope: !365, file: !2, line: 52, column: 20)
-!371 = !DILocation(line: 54, column: 3, scope: !370)
-!372 = !DILocation(line: 55, column: 3, scope: !370)
-!373 = !DILocation(line: 56, column: 1, scope: !370)
-!374 = !DILocation(line: 56, column: 1, scope: !365)
-!375 = distinct !DISubprogram(name: "~Class", linkageName: "_ZN1x5ClassD0Ev", scope: !320, file: !2, line: 52, type: !325, scopeLine: 52, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !328, retainedNodes: !265)
-!376 = !DILocalVariable(name: "this", arg: 1, scope: !375, type: !330, flags: DIFlagArtificial | DIFlagObjectPointer)
-!377 = !DILocation(line: 0, scope: !375)
-!378 = !DILocation(line: 52, column: 20, scope: !375)
-!379 = !DILocation(line: 56, column: 1, scope: !375)
-!380 = distinct !DISubprogram(name: "getClass", linkageName: "_Z8getClassv", scope: !2, file: !2, line: 64, type: !381, scopeLine: 64, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42)
-!381 = !DISubroutineType(types: !382)
-!382 = !{!279}
-!383 = !DILocation(line: 65, column: 10, scope: !380)
-!384 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "ClassAnon", scope: !385, file: !2, line: 6, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !386, vtableHolder: !250)
-!385 = !DINamespace(scope: null)
-!386 = !{!387, !388, !392}
-!387 = !DIDerivedType(tag: DW_TAG_inheritance, scope: !384, baseType: !290, extraData: i32 0)
-!388 = !DISubprogram(name: "ClassAnon", scope: !384, file: !2, line: 7, type: !389, scopeLine: 7, flags: DIFlagPrototyped, spFlags: DISPFlagLocalToUnit)
-!389 = !DISubroutineType(types: !390)
-!390 = !{null, !391}
-!391 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !384, size: 64, flags: DIFlagArtificial | DIFlagObjectPointer)
-!392 = !DISubprogram(name: "~ClassAnon", scope: !384, file: !2, line: 8, type: !389, scopeLine: 8, containingType: !384, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual | DISPFlagLocalToUnit)
-!393 = !DILocation(line: 65, column: 14, scope: !380)
-!394 = !DILocation(line: 65, column: 3, scope: !380)
-!395 = !DILocation(line: 66, column: 1, scope: !380)
-!396 = distinct !DISubprogram(name: "ClassAnon", linkageName: "_ZN12_GLOBAL__N_19ClassAnonC2Ev", scope: !384, file: !2, line: 30, type: !389, scopeLine: 30, flags: DIFlagPrototyped, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !42, declaration: !388, retainedNodes: !265)
-!397 = !DILocalVariable(name: "this", arg: 1, scope: !396, type: !398, flags: DIFlagArtificial | DIFlagObjectPointer)
-!398 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !384, size: 64)
-!399 = !DILocation(line: 0, scope: !396)
-!400 = !DILocation(line: 30, column: 26, scope: !396)
-!401 = !DILocation(line: 30, column: 35, scope: !396)
-!402 = !DILocation(line: 31, column: 3, scope: !403)
-!403 = distinct !DILexicalBlock(scope: !396, file: !2, line: 30, column: 35)
-!404 = !DILocation(line: 32, column: 3, scope: !403)
-!405 = !DILocation(line: 33, column: 3, scope: !403)
-!406 = !DILocation(line: 34, column: 1, scope: !396)
-!407 = !DILocation(line: 34, column: 1, scope: !403)
-!408 = distinct !DISubprogram(name: "deleteClass", linkageName: "_Z11deleteClassRP6IClass", scope: !2, file: !2, line: 68, type: !409, scopeLine: 68, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, retainedNodes: !265)
-!409 = !DISubroutineType(types: !410)
-!410 = !{null, !411}
-!411 = !DIDerivedType(tag: DW_TAG_reference_type, baseType: !279, size: 64)
-!412 = !DILocalVariable(name: "clazz", arg: 1, scope: !408, file: !2, line: 68, type: !411)
-!413 = !DILocation(line: 68, column: 34, scope: !408)
-!414 = !DILocation(line: 69, column: 10, scope: !408)
-!415 = !DILocation(line: 69, column: 3, scope: !408)
-!416 = !DILocation(line: 70, column: 3, scope: !408)
-!417 = !DILocation(line: 70, column: 9, scope: !408)
-!418 = !DILocation(line: 71, column: 1, scope: !408)
-!419 = distinct !DISubprogram(name: "~ClassAnon", linkageName: "_ZN12_GLOBAL__N_19ClassAnonD2Ev", scope: !384, file: !2, line: 58, type: !389, scopeLine: 58, flags: DIFlagPrototyped, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !42, declaration: !392, retainedNodes: !265)
-!420 = !DILocalVariable(name: "this", arg: 1, scope: !419, type: !398, flags: DIFlagArtificial | DIFlagObjectPointer)
-!421 = !DILocation(line: 0, scope: !419)
-!422 = !DILocation(line: 58, column: 25, scope: !419)
-!423 = !DILocation(line: 59, column: 3, scope: !424)
-!424 = distinct !DILexicalBlock(scope: !419, file: !2, line: 58, column: 25)
-!425 = !DILocation(line: 60, column: 3, scope: !424)
-!426 = !DILocation(line: 61, column: 3, scope: !424)
-!427 = !DILocation(line: 62, column: 1, scope: !424)
-!428 = !DILocation(line: 62, column: 1, scope: !419)
-!429 = distinct !DISubprogram(name: "~ClassAnon", linkageName: "_ZN12_GLOBAL__N_19ClassAnonD0Ev", scope: !384, file: !2, line: 58, type: !389, scopeLine: 58, flags: DIFlagPrototyped, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !42, declaration: !392, retainedNodes: !265)
-!430 = !DILocalVariable(name: "this", arg: 1, scope: !429, type: !398, flags: DIFlagArtificial | DIFlagObjectPointer)
-!431 = !DILocation(line: 0, scope: !429)
-!432 = !DILocation(line: 58, column: 25, scope: !429)
-!433 = !DILocation(line: 62, column: 1, scope: !429)
+!319 = distinct !DISubprogram(name: "Class", linkageName: "_ZN1x2ns5ClassC2Ev", scope: !320, file: !2, line: 24, type: !326, scopeLine: 24, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !325, retainedNodes: !265)
+!320 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "Class", scope: !321, file: !247, line: 19, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !323, vtableHolder: !250)
+!321 = !DINamespace(name: "ns", scope: !322)
+!322 = !DINamespace(name: "x", scope: null)
+!323 = !{!324, !325, !329}
+!324 = !DIDerivedType(tag: DW_TAG_inheritance, scope: !320, baseType: !250, extraData: i32 0)
+!325 = !DISubprogram(name: "Class", scope: !320, file: !247, line: 20, type: !326, scopeLine: 20, flags: DIFlagPrototyped, spFlags: 0)
+!326 = !DISubroutineType(types: !327)
+!327 = !{null, !328}
+!328 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !320, size: 64, flags: DIFlagArtificial | DIFlagObjectPointer)
+!329 = !DISubprogram(name: "~Class", scope: !320, file: !247, line: 21, type: !326, scopeLine: 21, containingType: !320, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual)
+!330 = !DILocalVariable(name: "this", arg: 1, scope: !319, type: !331, flags: DIFlagArtificial | DIFlagObjectPointer)
+!331 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !320, size: 64)
+!332 = !DILocation(line: 0, scope: !319)
+!333 = !DILocation(line: 24, column: 25, scope: !319)
+!334 = !DILocation(line: 24, column: 34, scope: !319)
+!335 = !DILocation(line: 25, column: 3, scope: !336)
+!336 = distinct !DILexicalBlock(scope: !319, file: !2, line: 24, column: 34)
+!337 = !DILocation(line: 26, column: 3, scope: !336)
+!338 = !DILocation(line: 27, column: 3, scope: !336)
+!339 = !DILocation(line: 28, column: 1, scope: !319)
+!340 = !DILocation(line: 28, column: 1, scope: !336)
+!341 = distinct !DISubprogram(name: "~IClass", linkageName: "_ZN6IClassD0Ev", scope: !250, file: !2, line: 36, type: !256, scopeLine: 36, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !259, retainedNodes: !265)
+!342 = !DILocalVariable(name: "this", arg: 1, scope: !341, type: !279, flags: DIFlagArtificial | DIFlagObjectPointer)
+!343 = !DILocation(line: 0, scope: !341)
+!344 = !DILocation(line: 36, column: 19, scope: !341)
+!345 = !DILocation(line: 38, column: 1, scope: !341)
+!346 = distinct !DISubprogram(name: "~Class", linkageName: "_ZN5ClassD0Ev", scope: !246, file: !2, line: 40, type: !261, scopeLine: 40, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !264, retainedNodes: !265)
+!347 = !DILocalVariable(name: "this", arg: 1, scope: !346, type: !267, flags: DIFlagArtificial | DIFlagObjectPointer)
+!348 = !DILocation(line: 0, scope: !346)
+!349 = !DILocation(line: 40, column: 17, scope: !346)
+!350 = !DILocation(line: 44, column: 1, scope: !346)
+!351 = distinct !DISubprogram(name: "~ClassX", linkageName: "_ZN6ClassXD2Ev", scope: !290, file: !2, line: 46, type: !294, scopeLine: 46, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !297, retainedNodes: !265)
+!352 = !DILocalVariable(name: "this", arg: 1, scope: !351, type: !299, flags: DIFlagArtificial | DIFlagObjectPointer)
+!353 = !DILocation(line: 0, scope: !351)
+!354 = !DILocation(line: 46, column: 19, scope: !351)
+!355 = !DILocation(line: 47, column: 3, scope: !356)
+!356 = distinct !DILexicalBlock(scope: !351, file: !2, line: 46, column: 19)
+!357 = !DILocation(line: 48, column: 3, scope: !356)
+!358 = !DILocation(line: 49, column: 3, scope: !356)
+!359 = !DILocation(line: 50, column: 1, scope: !356)
+!360 = !DILocation(line: 50, column: 1, scope: !351)
+!361 = distinct !DISubprogram(name: "~ClassX", linkageName: "_ZN6ClassXD0Ev", scope: !290, file: !2, line: 46, type: !294, scopeLine: 46, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !297, retainedNodes: !265)
+!362 = !DILocalVariable(name: "this", arg: 1, scope: !361, type: !299, flags: DIFlagArtificial | DIFlagObjectPointer)
+!363 = !DILocation(line: 0, scope: !361)
+!364 = !DILocation(line: 46, column: 19, scope: !361)
+!365 = !DILocation(line: 50, column: 1, scope: !361)
+!366 = distinct !DISubprogram(name: "~Class", linkageName: "_ZN1x2ns5ClassD2Ev", scope: !320, file: !2, line: 52, type: !326, scopeLine: 52, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !329, retainedNodes: !265)
+!367 = !DILocalVariable(name: "this", arg: 1, scope: !366, type: !331, flags: DIFlagArtificial | DIFlagObjectPointer)
+!368 = !DILocation(line: 0, scope: !366)
+!369 = !DILocation(line: 52, column: 24, scope: !366)
+!370 = !DILocation(line: 53, column: 3, scope: !371)
+!371 = distinct !DILexicalBlock(scope: !366, file: !2, line: 52, column: 24)
+!372 = !DILocation(line: 54, column: 3, scope: !371)
+!373 = !DILocation(line: 55, column: 3, scope: !371)
+!374 = !DILocation(line: 56, column: 1, scope: !371)
+!375 = !DILocation(line: 56, column: 1, scope: !366)
+!376 = distinct !DISubprogram(name: "~Class", linkageName: "_ZN1x2ns5ClassD0Ev", scope: !320, file: !2, line: 52, type: !326, scopeLine: 52, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, declaration: !329, retainedNodes: !265)
+!377 = !DILocalVariable(name: "this", arg: 1, scope: !376, type: !331, flags: DIFlagArtificial | DIFlagObjectPointer)
+!378 = !DILocation(line: 0, scope: !376)
+!379 = !DILocation(line: 52, column: 24, scope: !376)
+!380 = !DILocation(line: 56, column: 1, scope: !376)
+!381 = distinct !DISubprogram(name: "getClass", linkageName: "_Z8getClassv", scope: !2, file: !2, line: 64, type: !382, scopeLine: 64, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42)
+!382 = !DISubroutineType(types: !383)
+!383 = !{!279}
+!384 = !DILocation(line: 65, column: 10, scope: !381)
+!385 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "ClassAnon", scope: !386, file: !2, line: 6, size: 64, flags: DIFlagTypePassByReference | DIFlagNonTrivial, elements: !387, vtableHolder: !250)
+!386 = !DINamespace(scope: null)
+!387 = !{!388, !389, !393}
+!388 = !DIDerivedType(tag: DW_TAG_inheritance, scope: !385, baseType: !290, extraData: i32 0)
+!389 = !DISubprogram(name: "ClassAnon", scope: !385, file: !2, line: 7, type: !390, scopeLine: 7, flags: DIFlagPrototyped, spFlags: DISPFlagLocalToUnit)
+!390 = !DISubroutineType(types: !391)
+!391 = !{null, !392}
+!392 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !385, size: 64, flags: DIFlagArtificial | DIFlagObjectPointer)
+!393 = !DISubprogram(name: "~ClassAnon", scope: !385, file: !2, line: 8, type: !390, scopeLine: 8, containingType: !385, virtualIndex: 0, flags: DIFlagPrototyped, spFlags: DISPFlagVirtual | DISPFlagLocalToUnit)
+!394 = !DILocation(line: 65, column: 14, scope: !381)
+!395 = !DILocation(line: 65, column: 3, scope: !381)
+!396 = !DILocation(line: 66, column: 1, scope: !381)
+!397 = distinct !DISubprogram(name: "ClassAnon", linkageName: "_ZN12_GLOBAL__N_19ClassAnonC2Ev", scope: !385, file: !2, line: 30, type: !390, scopeLine: 30, flags: DIFlagPrototyped, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !42, declaration: !389, retainedNodes: !265)
+!398 = !DILocalVariable(name: "this", arg: 1, scope: !397, type: !399, flags: DIFlagArtificial | DIFlagObjectPointer)
+!399 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !385, size: 64)
+!400 = !DILocation(line: 0, scope: !397)
+!401 = !DILocation(line: 30, column: 26, scope: !397)
+!402 = !DILocation(line: 30, column: 35, scope: !397)
+!403 = !DILocation(line: 31, column: 3, scope: !404)
+!404 = distinct !DILexicalBlock(scope: !397, file: !2, line: 30, column: 35)
+!405 = !DILocation(line: 32, column: 3, scope: !404)
+!406 = !DILocation(line: 33, column: 3, scope: !404)
+!407 = !DILocation(line: 34, column: 1, scope: !397)
+!408 = !DILocation(line: 34, column: 1, scope: !404)
+!409 = distinct !DISubprogram(name: "deleteClass", linkageName: "_Z11deleteClassRP6IClass", scope: !2, file: !2, line: 68, type: !410, scopeLine: 68, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !42, retainedNodes: !265)
+!410 = !DISubroutineType(types: !411)
+!411 = !{null, !412}
+!412 = !DIDerivedType(tag: DW_TAG_reference_type, baseType: !279, size: 64)
+!413 = !DILocalVariable(name: "clazz", arg: 1, scope: !409, file: !2, line: 68, type: !412)
+!414 = !DILocation(line: 68, column: 34, scope: !409)
+!415 = !DILocation(line: 69, column: 10, scope: !409)
+!416 = !DILocation(line: 69, column: 3, scope: !409)
+!417 = !DILocation(line: 70, column: 3, scope: !409)
+!418 = !DILocation(line: 70, column: 9, scope: !409)
+!419 = !DILocation(line: 71, column: 1, scope: !409)
+!420 = distinct !DISubprogram(name: "~ClassAnon", linkageName: "_ZN12_GLOBAL__N_19ClassAnonD2Ev", scope: !385, file: !2, line: 58, type: !390, scopeLine: 58, flags: DIFlagPrototyped, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !42, declaration: !393, retainedNodes: !265)
+!421 = !DILocalVariable(name: "this", arg: 1, scope: !420, type: !399, flags: DIFlagArtificial | DIFlagObjectPointer)
+!422 = !DILocation(line: 0, scope: !420)
+!423 = !DILocation(line: 58, column: 25, scope: !420)
+!424 = !DILocation(line: 59, column: 3, scope: !425)
+!425 = distinct !DILexicalBlock(scope: !420, file: !2, line: 58, column: 25)
+!426 = !DILocation(line: 60, column: 3, scope: !425)
+!427 = !DILocation(line: 61, column: 3, scope: !425)
+!428 = !DILocation(line: 62, column: 1, scope: !425)
+!429 = !DILocation(line: 62, column: 1, scope: !420)
+!430 = distinct !DISubprogram(name: "~ClassAnon", linkageName: "_ZN12_GLOBAL__N_19ClassAnonD0Ev", scope: !385, file: !2, line: 58, type: !390, scopeLine: 58, flags: DIFlagPrototyped, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !42, declaration: !393, retainedNodes: !265)
+!431 = !DILocalVariable(name: "this", arg: 1, scope: !430, type: !399, flags: DIFlagArtificial | DIFlagObjectPointer)
+!432 = !DILocation(line: 0, scope: !430)
+!433 = !DILocation(line: 58, column: 25, scope: !430)
+!434 = !DILocation(line: 62, column: 1, scope: !430)

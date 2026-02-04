@@ -15,9 +15,9 @@ struct ClassX : public Class {
   virtual ~ClassX();
 };
 
-namespace x {
+namespace x::ns {
 struct Class : public IClass {
   Class();
   virtual ~Class();
 };
-} // namespace x
+} // namespace x::ns
