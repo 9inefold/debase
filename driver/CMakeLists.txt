@@ -5,6 +5,8 @@ CPMAddPackage("gh:geode-sdk/json@3.2.1")
 add_executable(${PROJECT_NAME}
   Driver.cpp
   NameClassifier.cpp
+  Pattern.cpp
+  SymbolMatcher.cpp
   Triple.cpp
   UnlinkRefs.cpp
 )
