@@ -1,7 +1,9 @@
 {
-  "patterns": [
-    "A", "B", "C", "E"
-  ],
+  "patterns": {
+    "ctor": ["A", "B", "C"],
+    "dtor": ["A", "B", "C"],
+    "all": "E"
+  },
   "files": [
     "{sourcedir}/Class.ll"
   ]
