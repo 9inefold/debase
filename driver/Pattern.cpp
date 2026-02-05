@@ -23,6 +23,7 @@
 
 #include "Pattern.hpp"
 #include "PatternLex.hpp"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -35,6 +36,7 @@
 #include "Character.hpp"
 #include "FilePropertyCache.hpp"
 #include "NameClassifier.hpp"
+#include "SymbolFeatures.hpp"
 
 using namespace debase_tool;
 using namespace llvm;
@@ -104,13 +106,11 @@ static bool IsValidPOSIXMetaclass(StringRef CC) {
 // Pattern
 //============================================================================//
 
-bool SimplePattern::match(const Features& F) const {
+bool SimplePattern::match(const SymbolFeatures& F) const {
   const ssize_t NNested = F.NestedNames.size();
-  if (Patterns.size() != static_cast<size_t>(NNested + 1))
+  if (ssize_t(Patterns.size()) != NNested)
     return false;
   ArrayRef Pats(Patterns);
-  if (F.BaseName != Pats.back())
-    return false;
   for (ssize_t I = 0; I < NNested; ++I)
     if (Pats[I] != F.NestedNames[I])
       return false;

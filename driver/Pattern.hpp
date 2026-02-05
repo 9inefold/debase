@@ -29,7 +29,7 @@
 
 namespace debase_tool {
 
-struct Features;
+struct SymbolFeatures;
 class SymbolMatcher;
 
 #define DEFINE_ITERATOR_CTOR(CLASS, OUT)                                            \
@@ -42,7 +42,7 @@ public:
   struct Token;
   virtual ~Pattern() = default;
   /// Match against a set of features.
-  virtual bool match(const Features& F) const = 0;
+  virtual bool match(const SymbolFeatures& F) const = 0;
   /// If the class has any complex behaviour.
   virtual bool isSimple() const { return false; }
   /// If the class needs to be regenerated for every file.
@@ -61,7 +61,7 @@ protected:
   }
   //DEFINE_ITERATOR_CTOR(SimplePattern, Patterns)
 public:
-  bool match(const Features& F) const override;
+  bool match(const SymbolFeatures& F) const override;
   bool isSimple() const override { return true; }
 };
 

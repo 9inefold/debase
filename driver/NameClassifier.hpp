@@ -23,11 +23,11 @@
 
 #pragma once
 
-#include "llvm/Demangle/Demangle.h"
-#include "llvm/Support/Allocator.h"
 #include "LLVM.hpp"
 
 namespace debase_tool {
+
+struct SymbolFeatures;
 
 enum class SymbolKind {
   Invalid,
@@ -37,32 +37,10 @@ enum class SymbolKind {
   Ignorable,
 };
 
-/// The useful features found in a function symbol.
-struct Features {
-  SymbolKind SymKind = SymbolKind::Invalid;
-  int Variant = -1; // For itanium compat
-  std::string BaseName;
-  SmallVector<std::string, 2> NestedNames;
-public:
-  bool isCtor() const { return SymKind == SymbolKind::Constructor; }
-  bool isDtor() const { return SymKind == SymbolKind::Destructor; }
-  bool isCtorDtor() const { return isCtor() || isDtor(); }
-  bool isOther() const { return SymKind == SymbolKind::Other; }
-  bool isIgnorable() const { return SymKind == SymbolKind::Ignorable; }
-  bool isInvalid() const { return SymKind == SymbolKind::Invalid; }
-  
-  void clear() {
-    SymKind = SymbolKind::Invalid;
-    Variant = -1;
-    BaseName.clear();
-    NestedNames.clear();
-  }
-};
-
 /// Classifies symbols.
 class Classifier {
 public:
-  virtual SymbolKind classify(const std::string& Sym, Features* Out) = 0;
+  virtual SymbolKind classify(const std::string& Sym, SymbolFeatures* Out) = 0;
   SymbolKind classify(const std::string& Sym) { return classify(Sym, nullptr); }
 private:
   virtual void anchor();
@@ -71,14 +49,14 @@ private:
 /// Classifies symbols from the Itanium ABI.
 class ItaniumClassifier final : public Classifier {
 public:
-  SymbolKind classify(const std::string& Sym, Features* Out) override;
+  SymbolKind classify(const std::string& Sym, SymbolFeatures* Out) override;
   SymbolKind classify(const std::string& Sym) { return classify(Sym, nullptr); }
 };
 
 /// Classifies symbols from the Microsoft ABI.
 class MSVCClassifier final : public Classifier {
 public:
-  SymbolKind classify(const std::string& Sym, Features* Out) override;
+  SymbolKind classify(const std::string& Sym, SymbolFeatures* Out) override;
   SymbolKind classify(const std::string& Sym) { return classify(Sym, nullptr); }
 };
 

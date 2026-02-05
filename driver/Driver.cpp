@@ -20,6 +20,7 @@
 #include "FilePropertyCache.hpp"
 #include "LLVMTargets.hpp"
 #include "NameClassifier.hpp"
+#include "SymbolFeatures.hpp"
 #include "Pattern.hpp"
 #include "PatternLex.hpp"
 #include "Triple.hpp"
@@ -27,6 +28,7 @@
 #include "UnlinkRefs.hpp"
 #include "llvm/InitializePasses.h"
 #include "llvm/PassRegistry.h"
+#include "llvm/Demangle/Demangle.h"
 // #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IRReader/IRReader.h"
@@ -1214,7 +1216,7 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
     return false;
   }
 
-  Features FFeats {};
+  SymbolFeatures FFeats {};
   for (Function& F : M->getFunctionList()) {
     std::string Name = F.getName().str();
     SymClassifier->classify(Name, &FFeats);
