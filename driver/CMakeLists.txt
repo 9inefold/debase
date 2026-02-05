@@ -11,8 +11,8 @@ add_executable(${PROJECT_NAME}
   UnlinkRefs.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
-target_link_libraries(${PROJECT_NAME} PRIVATE
-  debase::llvm debase::rt mat-json
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  debase::llvm debase::rt
 )
 #target_compile_options(${PROJECT_NAME} PUBLIC
 #  -fno-exceptions -funwind-tables -stdlib=libc++

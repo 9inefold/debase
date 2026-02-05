@@ -59,12 +59,21 @@ struct Pattern::Token {
     KRegexFmt,  // `I?{file.stem}+` => `"I?(%0)+" + [file.stem]`
   };
 
+  /// The string `stem`.
+  static const char kStem[];
+  /// The string `dir`.
+  static const char kDir[];
+  /// The string `ext`.
+  static const char kExt[];
+
+  static constexpr uint32_t kMaxTrailing = (1 << 3) - 1;
+
   /// The kind of the token.
   Kind kind = KSimple;
   /// The length of the token data.
   uint32_t size : 24 = 0;
   /// The number of trailing arguments (for a format group)
-  /// Currently only 6 options, so it can be 6 bits.
+  /// Currently only 6 options, so it can be less bits.
   uint32_t trailing : 3 = 0;
   /// If this token should be grouped with the next.
   uint32_t grouped : 1 = 0;

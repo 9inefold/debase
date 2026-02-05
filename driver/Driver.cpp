@@ -61,7 +61,7 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <matjson.hpp>
+//#include <matjson.hpp>
 
 #ifndef NDEBUG
 # include "llvm/Support/BuryPointer.h"
@@ -642,6 +642,10 @@ static StringRef TokName(Pattern::Token::Kind K) {
     return "This";
   case KLateBind:
     return "LateBind";
+  case KSimpleFmt:
+    return "SimpleFmt";
+  case KRegexFmt:
+    return "RegexFmt";
   default:
     llvm_unreachable("invalid Token::Kind");
   }
@@ -685,9 +689,17 @@ static bool TestLexPattern(StringRef P, const bool ShouldPass,
 
   outs().indent((Indent + 1) * 2);
   if (!Toks.empty()) {
+    int SkipCount = 0;
     ListSeparator LS(" :: ");
-    for (Pattern::Token Tok : Toks)
+    for (Pattern::Token Tok : Toks) {
+      if (SkipCount--) {
+        outs() << Tok << (SkipCount ? ", " : ")");
+        continue;
+      }
       outs() << LS << Tok;
+      if ((SkipCount = Tok.trailing))
+        outs() << " (";
+    }
     outs() << "\n\n";
   } else {
     outs() << "<empty>\n\n";
@@ -759,8 +771,61 @@ static void RunLexTests() {
     {"{this.@}",    false},
   );
 
-  LEX_TESTS("Compound",
-    {"I{file.stem}",      true}
+  LEX_TESTS("Regex",
+    // Basic
+    {"/II/",              true},
+    {"II?",               true},
+    {"I+",                true},
+    {"/I+/",              true},
+    {"I*v",               true},
+    {"::/I*v/",           true},
+    {"x::/I*v/",          true},
+    {"**::I*v",           true},
+    {"**::/I*v/",         true},
+    {"?v",                false},
+    {"*v",                false},
+    {"I::*v",             false},
+    {"+v",                false},
+    {"**v",               false},
+    {"I*?v",              true},
+    {"I*??v",             false},
+    {"I*+v",              false},
+    // Escapes
+    {"\\a\\d?",           true},
+    {"\\w+",              true},
+    {"\\a\\i*",           true},
+    {"\\n+",              false},
+    {"\\*",               false},
+    // Character classes
+    {"[a-z]",             true},
+    {"[a-zA-Z]+",         true},
+    {"[0-z]",             false},
+    {"[0-9A-z]",          false},
+    {"[^0-9]",            true},
+    {"[^]",               false},
+    {"[-abc]",            false},
+    {"[abc-]",            false},
+    {"[[:alnum:]]",       true},
+    {"[^[:digit:]]",      true},
+    {"[[:xyz:]]",         false},
+  );
+
+  LEX_TESTS("Simple Format",
+    {"I{file.stem}",      true},
+    {"{this.stem}{file.stem}", true},
+    {"/I{file.stem}/",    true},
+    {"I{this.@}v",        false}
+  );
+
+  LEX_TESTS("Regex Format",
+    {"I{file.stem}+",     true},
+    {"/{file.stem}+/",    true},
+    {"i::/{file.stem}+/", true},
+    {"x::I{file.stem}",   true},
+    {"**::{file.stem}",   true},
+    {"{file.stem}\\w*",   true},
+    {"?{file.stem}",      false},
+    {"I[{file.stem}]",    false},
   );
 
   std::exit(Result ? 0 : 1);
@@ -801,6 +866,7 @@ int main(int Argc, char** Argv) {
     return 1;
   }
 
+#if 0
   std::optional<matjson::Value> ConfigJSON;
   if (!ConfigFile.empty()) {
     ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
@@ -815,6 +881,7 @@ int main(int Argc, char** Argv) {
     ConfigJSON.emplace(matjson::parse(ConfigSrc).unwrap());
     //auto ConfigSrc = ConfigJSON->get("files").unwrap().asArray().unwrap();
   }
+#endif
 
   if (NoOutput && !OutputFilepath.empty()) {
     errs() << "WARNING: The -o (output path) option is ignored when the "

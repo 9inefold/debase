@@ -1,6 +1,6 @@
 {
   "patterns": [
-    "**/{file.stem}*"
+    "**::/{file.stem}*/"
   ],
   "files": [
     "{this.dir}/Simple.ll",
