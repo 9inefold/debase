@@ -727,7 +727,7 @@ static bool TestLexGroup(StringRef Name, ArrayRef<std::pair<StringRef, bool>> Pa
   Result = TestLexGroup(NAME, Patterns, BP, P) && Result; \
 }()
 
-static void RunLexTests() {
+static void RunLexTests(bool Exit = true) {
   llvm::BumpPtrAllocator BP;
   std::optional<FilePropertyCache> Prop;
   bool Result = true;
@@ -800,6 +800,7 @@ static void RunLexTests() {
     {"I::*v",             false},
     {"+v",                false},
     {"**v",               false},
+    {"v**",               false},
     {"I*?v",              true},
     {"I*??v",             false},
     {"I*+v",              false},
@@ -842,7 +843,8 @@ static void RunLexTests() {
     {"I[{file.stem}]",    false},
   );
 
-  std::exit(Result ? 0 : 1);
+  if (Exit)
+    std::exit(Result ? 0 : 1);
 }
 
 int main(int Argc, char** Argv) {
@@ -864,7 +866,7 @@ int main(int Argc, char** Argv) {
   cl::ParseCommandLineOptions(Argc, Argv,
     "llvmir pass that removes calls to bases in ctors/dtors.\n");
   
-  RunLexTests();
+  RunLexTests(false);
   
   LLVMContext Context;
 
