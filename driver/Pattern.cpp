@@ -106,15 +106,30 @@ static bool IsValidPOSIXMetaclass(StringRef CC) {
 // Pattern
 //============================================================================//
 
-bool SimplePattern::match(const SymbolFeatures& F) const {
-  const ssize_t NNested = F.NestedNames.size();
-  if (ssize_t(Patterns.size()) != NNested)
-    return false;
+bool SimplePattern::matchImpl(ArrayRef<std::string> Names) const {
   ArrayRef Pats(Patterns);
-  for (ssize_t I = 0; I < NNested; ++I)
-    if (Pats[I] != F.NestedNames[I])
+  assert(Pats.size() == Names.size());
+  for (size_t I = 0; I < Names.size(); ++I)
+    if (Pats[I] != Names[I])
       return false;
   return true;
+}
+
+bool SimplePattern::match(const SymbolFeatures& F) const {
+  if (Patterns.size() != F.NestedNames.size())
+    return false;
+  return this->matchImpl(F.NestedNames);
+}
+
+bool BaseNameOnlyGlobPattern::match(const SymbolFeatures& F) const {
+  return F.baseName() == this->Pattern;
+}
+
+bool NestedNameGlobPattern::match(const SymbolFeatures& F) const {
+  const size_t MinItems = Nested.Patterns.size();
+  if (F.NestedNames.size() < MinItems)
+    return false;
+  return Nested.matchImpl(ArrayRef(F.NestedNames).take_back(MinItems));
 }
 
 //============================================================================//
@@ -924,3 +939,4 @@ Error debase_tool::lexTokensForPattern(StringRef Pat,
 }
 
 void Pattern::anchor() {}
+void GlobPattern::anchor() {}

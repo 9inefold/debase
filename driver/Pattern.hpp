@@ -32,9 +32,7 @@ namespace debase_tool {
 struct SymbolFeatures;
 class SymbolMatcher;
 
-#define DEFINE_ITERATOR_CTOR(CLASS, OUT)                                            \
-template <typename ItTy> CLASS(ItTy S, ItTy E) : OUT(S, E) {}                       \
-template <typename RangeT> CLASS (const llvm::iterator_range<RangeT>& R) : OUT(R) {}
+class NestedNameGlobPattern;
 
 /// The base of symbol matching types.
 class Pattern {
@@ -54,20 +52,41 @@ private:
 /// The simplest pattern type.
 class SimplePattern final : public Pattern {
   friend class SymbolMatcher;
+  friend class NestedNameGlobPattern;
   SmallVector<StringRef, 2> Patterns;
 protected:
   SimplePattern(ArrayRef<StringRef> P) : Patterns(P) {
     assert(!Patterns.empty());
   }
-  //DEFINE_ITERATOR_CTOR(SimplePattern, Patterns)
 public:
   bool match(const SymbolFeatures& F) const override;
+  bool matchImpl(ArrayRef<std::string> Names) const;
   bool isSimple() const override { return true; }
 };
 
 /// Base for globbing patterns. Globs from the left hand side.
 class GlobPattern : public Pattern {
+  void anchor() override;
+};
+
+/// Simplest glob pattern. For things such as `**::ClassName`.
+class BaseNameOnlyGlobPattern final : public GlobPattern {
   friend class SymbolMatcher;
+  StringRef Pattern;
+protected:
+  BaseNameOnlyGlobPattern(StringRef P) : Pattern(P) {}
+public:
+  bool match(const SymbolFeatures& F) const override;
+};
+
+/// Glob for things such as `**::x::ClassName`.
+class NestedNameGlobPattern final : public GlobPattern {
+  friend class SymbolMatcher;
+  SimplePattern Nested;
+protected:
+  NestedNameGlobPattern(ArrayRef<StringRef> P) : Nested(P) {}
+public:
+  bool match(const SymbolFeatures& F) const override;
 };
 
 } // namespace debase_tool
