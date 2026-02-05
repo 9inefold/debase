@@ -1,7 +1,5 @@
 include_guard(DIRECTORY)
 
-CPMAddPackage("gh:geode-sdk/json@3.2.1")
-
 add_executable(${PROJECT_NAME}
   Driver.cpp
   FilePropertyCache.cpp

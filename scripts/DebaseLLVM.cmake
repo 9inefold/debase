@@ -1,12 +1,8 @@
 include_guard(DIRECTORY)
 
-set(ZLIB_REPO "https://github.com/madler/zlib.git"
-  CACHE STRING "ZLIB repository location."
-)
 CPMAddPackage(
   NAME zlib 
-  GIT_REPOSITORY ${ZLIB_REPO}
-  GIT_TAG "v1.3.1"
+  URL  https://github.com/madler/zlib/releases/download/v1.3.1/zlib131.zip
   OPTIONS
     "ZLIB_BUILD_TESTING OFF"
 )
