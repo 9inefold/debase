@@ -106,30 +106,27 @@ static bool IsValidPOSIXMetaclass(StringRef CC) {
 // Pattern
 //============================================================================//
 
-bool SimplePattern::matchImpl(ArrayRef<std::string> Names) const {
+bool SimplePattern::match(ArrayRef<std::string> Names) const {
+  if (Patterns.size() != Names.size())
+    return false;
   ArrayRef Pats(Patterns);
-  assert(Pats.size() == Names.size());
   for (size_t I = 0; I < Names.size(); ++I)
     if (Pats[I] != Names[I])
       return false;
   return true;
 }
 
-bool SimplePattern::match(const SymbolFeatures& F) const {
-  if (Patterns.size() != F.NestedNames.size())
-    return false;
-  return this->matchImpl(F.NestedNames);
+bool BaseNameOnlyGlobPattern::match(ArrayRef<std::string> Names) const {
+  assert(!Names.empty() && "Invalid glob input");
+  return Names.back() == this->Pattern;
 }
 
-bool BaseNameOnlyGlobPattern::match(const SymbolFeatures& F) const {
-  return F.baseName() == this->Pattern;
-}
-
-bool NestedNameGlobPattern::match(const SymbolFeatures& F) const {
-  const size_t MinItems = Nested.Patterns.size();
-  if (F.NestedNames.size() < MinItems)
+bool NestedNameGlobPattern::match(ArrayRef<std::string> Names) const {
+  assert(!Names.empty() && "Invalid glob input");
+  if (Names.size() < Nested->count())
     return false;
-  return Nested.matchImpl(ArrayRef(F.NestedNames).take_back(MinItems));
+  return Nested->match(
+    Names.take_back(Nested->count()));
 }
 
 //============================================================================//
@@ -893,13 +890,13 @@ constexpr char Token::kExt[]  = "ext";
 
 /// Checks if value is a global id, and returns the enum.
 Token::FilePropertyKind Token::GetFilePropertyKind(const char* Str) {
-  static SmallPtrSet<const char*, 4> Props {kStem, kDir, kExt};
+  //static SmallPtrSet<const char*, 4> Props {kStem, kDir, kExt};
   if (LLVM_UNLIKELY(!Str))
     return FPKUnknown;
   if (Str[0] == '\0')
     return FPKFile;
-  if (!Props.contains(Str))
-    return FPKUnknown;
+  //if (!Props.contains(Str))
+  //  return FPKUnknown;
   // Get the actual properties.
   else if (Str == kStem)
     return FPKStem;
@@ -907,7 +904,9 @@ Token::FilePropertyKind Token::GetFilePropertyKind(const char* Str) {
     return FPKDir;
   else if (Str == kExt)
     return FPKExt;
-  llvm_unreachable("invalid file property name");
+  else
+    return FPKUnknown;
+  //llvm_unreachable("invalid file property name");
 }
 
 Error debase_tool::lexTokensForPattern(StringRef Pat,
