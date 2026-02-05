@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Error.h"
 #include "LLVM.hpp"
@@ -33,6 +34,10 @@ namespace debase_tool {
 
 struct Features;
 class SymbolMatcher;
+class FilePropertyCache;
+
+/// `function_ref` that does a `StringRef` to `StringRef` transformation.
+using StringTransformer = llvm::function_ref<StringRef(StringRef)>;
 
 /// The base of symbol matching types.
 class Pattern {
@@ -66,6 +71,18 @@ struct Pattern::Token {
   /// The string `ext`.
   static const char kExt[];
 
+  enum FilePropertyKind {
+    FPKUnknown,
+    FPKFile,
+    FPKStem,
+    FPKDir,
+    FPKExt,
+  };
+
+  /// Checks if value is a global id, and returns the enum.
+  static FilePropertyKind GetFilePropertyKind(const char* Str);
+
+  /// Max amount of trailing values.
   static constexpr uint32_t kMaxTrailing = (1 << 3) - 1;
 
   /// The kind of the token.
@@ -99,7 +116,12 @@ public:
 };
 
 /// Lexes `Token`s for a `Pattern` from `Pat`.
+/// @param Intern Function that returns a copy of the input string with a managed lifetime.
 llvm::Error lexTokensForPattern(StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks,
-                                llvm::BumpPtrAllocator& BP);
+                                StringTransformer Intern, FilePropertyCache* This = nullptr);
+
+/// Lexes `Token`s for a `Pattern` from `Pat`.
+llvm::Error lexTokensForPattern(StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks,
+                                llvm::BumpPtrAllocator& BP, FilePropertyCache* This = nullptr);
 
 } // namespace debase_tool

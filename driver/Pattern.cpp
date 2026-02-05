@@ -24,12 +24,14 @@
 #include "Pattern.hpp"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Compiler.h"
 #include "Character.hpp"
+#include "FilePropertyCache.hpp"
 
 using namespace debase_tool;
 using namespace llvm;
@@ -61,6 +63,10 @@ static std::optional<StringRef> GetValidReplacementMember(Token::Kind, StringRef
     return Token::kExt;
   else
     return std::nullopt;
+}
+/// Checks if `{obj.[member]}` is valid.
+static std::optional<StringRef> GetValidReplacementMember(StringRef Member) {
+  return GetValidReplacementMember(Token::KThis, Member);
 }
 
 /// Ensures a case range only contains valid characters, and doesn't pass through
@@ -98,18 +104,21 @@ class PatternLexer {
   using enum Pattern::Token::Kind;
   /// Output tokens.
   SmallVectorImpl<Pattern::Token>& Toks;
-  /// Allocator for compound groups.
-  BumpPtrAllocator& BP;
   /// The pattern.
   StringRef Pat;
   /// The current token text.
   StringRef Curr = "";
+  /// Allocator for compound groups.
+  /// Safe to store as `PatternLexer` cannot exist longer than the caller.
+  StringTransformer Intern;
+  /// Replacement function for `this`, if it exists
+  FilePropertyCache* This = nullptr;
 
 public:
   PatternLexer(StringRef Pat,
                SmallVectorImpl<Pattern::Token>& Toks,
-               BumpPtrAllocator& BP)
-   : Toks(Toks), Pat(Pat), BP(BP) {}
+               StringTransformer Intern, FilePropertyCache* This)
+   : Toks(Toks), Pat(Pat), Intern(Intern), This(This) {}
   
   class CompoundLexer;
   
@@ -138,12 +147,6 @@ public:
   }
   void tok(Token::Kind K, StringRef Data, bool Grouped = false) {
     Toks.push_back(Token::New(K, Data, Grouped));
-  }
-  StringRef intern(StringRef S) const {
-    char* Out = BP.Allocate<char>(S.size() + 1);
-    std::memcpy(Out, S.data(), S.size());
-    Out[S.size()] = '\0';
-    return {Out, S.size()};
   }
 
   /// Gets the next token.
@@ -246,7 +249,7 @@ public:
       return;
     
     // Create leading token.
-    StringRef Interned = Lex->intern(TempBuffer.str());
+    StringRef Interned = Lex->Intern(TempBuffer.str());
     Token::Kind K
       = HasRegex
         ? HasReplacements
@@ -416,9 +419,19 @@ Expected<Token> PatternLexer::handleReplacementImpl(StringRef R) const {
     return report("unknown replacement object");
   // Determine obj.[member]
   Member = Member.ltrim();
-  if (auto M = GetValidReplacementMember(Tok, Member))
+  if (auto M = GetValidReplacementMember(Tok, Member)) {
+    if (Tok == KThis && This) {
+      Expected<StringRef> Prop = This->getProperty(*M);
+      if (LLVM_UNLIKELY(!Prop))
+        return Prop.takeError();
+      else if (!Character::isIdentifier(*Prop))
+        return report("replacement contains invalid characters");
+      // Direct replacement via {this.prop}
+      return Token::New(KSimple, *Prop);
+    }
     // Valid replacement {obj.member}
     return Token::New(Tok, *M);
+  }
   return report("unknown replacement member");
 }
 
@@ -696,6 +709,27 @@ Error CompoundLexer::handleReplacement() {
   }
 
   auto R = StringRef(RBegin, REnd - RBegin).trim();
+  if (Lex->This && R.starts_with_insensitive("this")) {
+    std::optional<StringRef> M = GetValidReplacementMember(R.split('.').second);
+    // TODO: Cache?
+    if (LLVM_UNLIKELY(!M))
+      return report("invalid property name");
+    Expected<StringRef> Prop = Lex->This->getProperty(*M);
+    if (LLVM_UNLIKELY(!Prop))
+      return Prop.takeError();
+    else if (!Character::isIdentifier(*Prop))
+      return report("replacement contains invalid characters");
+    // Handle replacement
+    TempBuffer.push_back('(');
+    TempBuffer.append(*Prop);
+    TempBuffer.push_back(')');
+    // Done
+    At = REnd + 1;
+    LastReadKind = Character::KIdentifier;
+    return Error::success();
+  }
+
+  HasReplacements = true;
   auto [It, DidEmplace] = Replacements.try_emplace(R);
   if (DidEmplace) {
     Expected<Token> Tok = Lex->handleReplacementImpl(R);
@@ -723,7 +757,6 @@ Error CompoundLexer::lexImpl() {
   while (At < End) {
     Character::Kind K = this->at();
     if (K == Character::KOpenCurly) {
-      HasReplacements = true;
       if (Error E = handleReplacement())
         return E;
     } else if (K == Character::KIdentifier) {
@@ -740,16 +773,43 @@ Error CompoundLexer::lexImpl() {
   return Error::success();
 }
 
+/// Strips parentheses from (Replacement)
+static void StripParentheses(SmallVectorImpl<char>& S) {
+  char* Dst = &*S.begin();
+  char* Src = Dst;
+  const char* End = &*S.end();
+  
+  while (Src != End) {
+    if (*Src == '(' || *Src == ')') {
+      ++Src; continue;
+    }
+
+    if (Src != Dst)
+      *Dst = *Src;
+    ++Src; ++Dst;
+  }
+  // Change to fit stripped data.
+  S.resize(Dst - S.begin());
+}
+
 Error CompoundLexer::lex() {
+  if (Character::isIdentifier(Lex->Curr)) {
+    // Simple case of something like /abc/
+    assert(Character::isIdentifier(Lex->Curr));
+    Lex->tok(Token::KSimple);
+    return Error::success();
+  }
+
   this->start();
   if (Error E = lexImpl())
     return E;
   //assert((HasRegex || HasReplacements)
   //    && "Why was this passed to CompoundLexer T-T");
   if (!HasRegex && !HasReplacements) {
-    // Simple case of something like /abc/
-    assert(Character::isIdentifier(Lex->Curr));
-    Lex->tok(Token::KSimple);
+    assert(Lex->This != nullptr);
+    StripParentheses(TempBuffer);
+    StringRef Interned = Lex->Intern(TempBuffer.str());
+    Lex->tok(Token::KSimple, Interned);
     return Error::success();
   }
   // Push tokens
@@ -788,13 +848,33 @@ Error CompoundLexer::handleRegexError(Character::Kind K) {
 ////////////////////////////////////////////////////////////////////////////////
 // Pattern
 
-constexpr char Pattern::Token::kStem[] = "stem";
-constexpr char Pattern::Token::kDir[]  = "dir";
-constexpr char Pattern::Token::kExt[]  = "ext";
+constexpr char Token::kStem[] = "stem";
+constexpr char Token::kDir[]  = "dir";
+constexpr char Token::kExt[]  = "ext";
+
+/// Checks if value is a global id, and returns the enum.
+Token::FilePropertyKind Token::GetFilePropertyKind(const char* Str) {
+  static SmallPtrSet<const char*, 4> Props {kStem, kDir, kExt};
+  if (LLVM_UNLIKELY(!Str))
+    return FPKUnknown;
+  if (Str[0] == '\0')
+    return FPKFile;
+  if (!Props.contains(Str))
+    return FPKUnknown;
+  // Get the actual properties.
+  else if (Str == kStem)
+    return FPKStem;
+  else if (Str == kDir)
+    return FPKDir;
+  else if (Str == kExt)
+    return FPKExt;
+  llvm_unreachable("invalid file property name");
+}
 
 Error debase_tool::lexTokensForPattern(StringRef Pat,
                                        SmallVectorImpl<Pattern::Token>& Toks,
-                                       BumpPtrAllocator& BP) {
+                                       StringTransformer Interner,
+                                       FilePropertyCache* This) {
   Toks.clear();
   Pat = Pat.trim();
   Pat.consume_front("::");
@@ -802,8 +882,22 @@ Error debase_tool::lexTokensForPattern(StringRef Pat,
   if (Pat.empty())
     return MakeError("invalid pattern: cannot be empty");
   
-  PatternLexer PL(Pat, Toks, BP);
+  PatternLexer PL(Pat, Toks, Interner, This);
   return PL.lex();
 }
+
+Error debase_tool::lexTokensForPattern(StringRef Pat,
+                                       SmallVectorImpl<Pattern::Token>& Toks,
+                                       BumpPtrAllocator& BP, FilePropertyCache* This) {
+  return lexTokensForPattern(Pat, Toks, [&BP](StringRef S) -> StringRef {
+    if (S.empty())
+      return "";
+    char* Out = BP.Allocate<char>(S.size() + 1);
+    std::memcpy(Out, S.data(), S.size());
+    Out[S.size()] = '\0';
+    return {Out, S.size()};
+  }, This);
+}
+
 
 void Pattern::anchor() {}

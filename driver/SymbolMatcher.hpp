@@ -39,7 +39,9 @@ class SymbolMatcher {
 
   /// The type used to store patterns.
   using PatternVec = SmallVector<Pattern*, 0>;
+  /// Patterns used for matching constructors.
   PatternVec CtorPatterns;
+  /// Patterns used for matching destructors.
   PatternVec DtorPatterns;
 
   std::optional<StringRef> CurrentFilename;

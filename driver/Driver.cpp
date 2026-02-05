@@ -17,6 +17,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Shared.hpp"
+#include "FilePropertyCache.hpp"
 #include "LLVMTargets.hpp"
 #include "NameClassifier.hpp"
 #include "Pattern.hpp"
@@ -663,9 +664,11 @@ static raw_ostream& operator<<(raw_ostream& OS, Pattern::Token Tok) {
 }
 
 static bool TestLexPattern(StringRef P, const bool ShouldPass,
-                           llvm::BumpPtrAllocator& BP, int Indent = 0) {
+                           llvm::BumpPtrAllocator& BP,
+                           FilePropertyCache* Prop = nullptr,
+                           int Indent = 0) {
   SmallVector<Pattern::Token> Toks;
-  if (Error E = lexTokensForPattern(P, Toks, BP)) {
+  if (Error E = lexTokensForPattern(P, Toks, BP, Prop)) {
     outs().indent(Indent * 2);
     if (!ShouldPass) {
       WithColor(outs(), raw_ostream::GREEN)
@@ -709,22 +712,24 @@ static bool TestLexPattern(StringRef P, const bool ShouldPass,
 }
 
 static bool TestLexGroup(StringRef Name, ArrayRef<std::pair<StringRef, bool>> Patterns,
-                         llvm::BumpPtrAllocator& BP) {
+                         llvm::BumpPtrAllocator& BP, FilePropertyCache* Prop) {
   WithColor(outs(), raw_ostream::YELLOW) << Name << ":\n";
   bool Result = true;
   for (auto [P, ShouldPass] : Patterns)
-    if (!TestLexPattern(P, ShouldPass, BP, 1))
+    if (!TestLexPattern(P, ShouldPass, BP, Prop, 1))
       Result = false;
   return Result;
 }
 
-#define LEX_TESTS(NAME, ...) [&Result, &BP] () {          \
+#define LEX_TESTS(NAME, ...) [&Result, &BP, &Prop] () {   \
   std::pair<StringRef, bool> Patterns[] { __VA_ARGS__ };  \
-  Result = TestLexGroup(NAME, Patterns, BP) && Result;    \
+  FilePropertyCache* P = Prop ? &*Prop : nullptr;         \
+  Result = TestLexGroup(NAME, Patterns, BP, P) && Result; \
 }()
 
 static void RunLexTests() {
   llvm::BumpPtrAllocator BP;
+  std::optional<FilePropertyCache> Prop;
   bool Result = true;
 
   LEX_TESTS("Simple",
@@ -771,6 +776,14 @@ static void RunLexTests() {
     {"{this.@}",    false},
   );
 
+  Prop.emplace("xyz/Config.json");
+
+  LEX_TESTS("This Replacements",
+    {"{This.Dir}",  true},
+    {"{thiS.stEm}", true},
+    {"{this.dir}",  true},
+  );
+
   LEX_TESTS("Regex",
     // Basic
     {"/II/",              true},
@@ -814,16 +827,17 @@ static void RunLexTests() {
     {"I{file.stem}",      true},
     {"{this.stem}{file.stem}", true},
     {"/I{file.stem}/",    true},
+    {"/I{this.stem}/",    true},
     {"I{this.@}v",        false}
   );
 
   LEX_TESTS("Regex Format",
     {"I{file.stem}+",     true},
-    {"/{file.stem}+/",    true},
+    {"/{this.stem}+/",    true},
     {"i::/{file.stem}+/", true},
-    {"x::I{file.stem}",   true},
+    {"x::I{this.stem}",   true},
     {"**::{file.stem}",   true},
-    {"{file.stem}\\w*",   true},
+    {"{this.stem}\\w*",   true},
     {"?{file.stem}",      false},
     {"I[{file.stem}]",    false},
   );
