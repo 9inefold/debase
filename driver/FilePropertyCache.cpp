@@ -18,7 +18,7 @@
 
 #include "FilePropertyCache.hpp"
 #include "llvm/Support/Path.h"
-#include "Pattern.hpp"
+#include "PatternLex.hpp"
 
 using namespace debase_tool;
 using namespace llvm::sys;

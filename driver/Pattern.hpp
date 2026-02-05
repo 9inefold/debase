@@ -23,105 +23,51 @@
 
 #pragma once
 
-#include "llvm/ADT/STLFunctionalExtras.h"
-#include "llvm/Support/Allocator.h"
 #include "llvm/Support/Error.h"
 #include "LLVM.hpp"
-#include <cstdint>
 #include <optional>
 
 namespace debase_tool {
 
 struct Features;
 class SymbolMatcher;
-class FilePropertyCache;
 
-/// `function_ref` that does a `StringRef` to `StringRef` transformation.
-using StringTransformer = llvm::function_ref<StringRef(StringRef)>;
+#define DEFINE_ITERATOR_CTOR(CLASS, OUT)                                            \
+template <typename ItTy> CLASS(ItTy S, ItTy E) : OUT(S, E) {}                       \
+template <typename RangeT> CLASS (const llvm::iterator_range<RangeT>& R) : OUT(R) {}
 
 /// The base of symbol matching types.
 class Pattern {
 public:
   struct Token;
   virtual ~Pattern() = default;
-  virtual bool match(const Features& F) = 0;
+  /// Match against a set of features.
+  virtual bool match(const Features& F) const = 0;
+  /// If the class has any complex behaviour.
   virtual bool isSimple() const { return false; }
+  /// If the class needs to be regenerated for every file.
+  virtual bool isFinal() const { return true; }
 private:
-  void anchor();
+  virtual void anchor();
 };
 
-/// Represents a single token of a pattern.
-struct Pattern::Token {
-  enum Kind : uint32_t {
-    KUnknown,
-    KSimple,    // eg. `::x::y::Z`
-    KAnonymous, // `@`
-    KGlob,      // `**`
-    KThis,      // `{this.*}`
-    KLateBind,  // `{file.*}`
-    KRegex,     // eg. `I*X+0?[...]`
-    KSimpleFmt, // `I{file.stem}v{...}` => `"I%0v%1" + [file.stem, ...]`
-    KRegexFmt,  // `I?{file.stem}+` => `"I?(%0)+" + [file.stem]`
-  };
-
-  /// The string `stem`.
-  static const char kStem[];
-  /// The string `dir`.
-  static const char kDir[];
-  /// The string `ext`.
-  static const char kExt[];
-
-  enum FilePropertyKind {
-    FPKUnknown,
-    FPKFile,
-    FPKStem,
-    FPKDir,
-    FPKExt,
-  };
-
-  /// Checks if value is a global id, and returns the enum.
-  static FilePropertyKind GetFilePropertyKind(const char* Str);
-
-  /// Max amount of trailing values.
-  static constexpr uint32_t kMaxTrailing = (1 << 3) - 1;
-
-  /// The kind of the token.
-  Kind kind = KSimple;
-  /// The length of the token data.
-  uint32_t size : 24 = 0;
-  /// The number of trailing arguments (for a format group)
-  /// Currently only 6 options, so it can be less bits.
-  uint32_t trailing : 3 = 0;
-  /// If this token should be grouped with the next.
-  uint32_t grouped : 1 = 0;
-  /// If this token's text has been modified.
-  uint32_t modified : 1 = 0;
-  /// The token data.
-  const char* data = nullptr;
-
+/// The simplest pattern type.
+class SimplePattern final : public Pattern {
+  friend class SymbolMatcher;
+  SmallVector<StringRef, 2> Patterns;
+protected:
+  SimplePattern(ArrayRef<StringRef> P) : Patterns(P) {
+    assert(!Patterns.empty());
+  }
+  //DEFINE_ITERATOR_CTOR(SimplePattern, Patterns)
 public:
-  static Token New(Kind K, bool Grouped = false) {
-    return { .kind = K, .grouped = uint32_t(Grouped) };
-  }
-  static Token New(Kind K, StringRef Data, bool Grouped = false) {
-    return {
-      .kind = K,
-      .size = uint32_t(Data.size()),
-      .grouped = uint32_t(Grouped),
-      .data = Data.data()
-    };
-  }
-
-  StringRef str() const { return StringRef(data, size); }
+  bool match(const Features& F) const override;
+  bool isSimple() const override { return true; }
 };
 
-/// Lexes `Token`s for a `Pattern` from `Pat`.
-/// @param Intern Function that returns a copy of the input string with a managed lifetime.
-llvm::Error lexTokensForPattern(StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks,
-                                StringTransformer Intern, FilePropertyCache* This = nullptr);
-
-/// Lexes `Token`s for a `Pattern` from `Pat`.
-llvm::Error lexTokensForPattern(StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks,
-                                llvm::BumpPtrAllocator& BP, FilePropertyCache* This = nullptr);
+/// Base for globbing patterns. Globs from the left hand side.
+class GlobPattern : public Pattern {
+  friend class SymbolMatcher;
+};
 
 } // namespace debase_tool

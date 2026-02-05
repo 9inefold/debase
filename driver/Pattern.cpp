@@ -22,6 +22,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Pattern.hpp"
+#include "PatternLex.hpp"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -30,8 +31,10 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/StringSaver.h"
 #include "Character.hpp"
 #include "FilePropertyCache.hpp"
+#include "NameClassifier.hpp"
 
 using namespace debase_tool;
 using namespace llvm;
@@ -96,6 +99,27 @@ static bool IsValidPOSIXMetaclass(StringRef CC) {
     //.Case("ident", true)
     .Default(false);
 }
+
+//============================================================================//
+// Pattern
+//============================================================================//
+
+bool SimplePattern::match(const Features& F) const {
+  const ssize_t NNested = F.NestedNames.size();
+  if (Patterns.size() != static_cast<size_t>(NNested + 1))
+    return false;
+  ArrayRef Pats(Patterns);
+  if (F.BaseName != Pats.back())
+    return false;
+  for (ssize_t I = 0; I < NNested; ++I)
+    if (Pats[I] != F.NestedNames[I])
+      return false;
+  return true;
+}
+
+//============================================================================//
+// PatternLex
+//============================================================================//
 
 namespace {
 
@@ -898,6 +922,5 @@ Error debase_tool::lexTokensForPattern(StringRef Pat,
     return {Out, S.size()};
   }, This);
 }
-
 
 void Pattern::anchor() {}

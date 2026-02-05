@@ -24,6 +24,7 @@
 #include "SymbolMatcher.hpp"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "PatternLex.hpp"
 
 using namespace debase_tool;
 using namespace llvm;

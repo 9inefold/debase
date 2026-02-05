@@ -21,6 +21,7 @@
 #include "LLVMTargets.hpp"
 #include "NameClassifier.hpp"
 #include "Pattern.hpp"
+#include "PatternLex.hpp"
 #include "Triple.hpp"
 #include "UniqueStringVector.hpp"
 #include "UnlinkRefs.hpp"
