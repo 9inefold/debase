@@ -53,9 +53,10 @@ template <> struct pattern_needs_destructor_called<TYPE> : std::true_type {}
 /// Type of pattern.
 enum class PatternKind : unsigned {
   Unknown,
-  Simple,           // eg. `::x::y::Z`
-  BaseNameOnlyGlob, // eg. `**::Z`
-  NestedNameGlob,   // eg. `**::y::Z`
+  Simple,         // eg. `::x::y::Z`
+  LeadingSimple,  // eg. `[x::y]::**::Z`
+  LeadingGlob,    // eg. `**::y::Z`
+  ButterflyGlob,  // eg. `x::**::Z`
 };
 
 /// The base of symbol matching types.
@@ -129,48 +130,71 @@ public:
   //bool isSimple() const override { return true; }
 };
 
+/// A pattern type for cases such as `[x::y]::**::Z`. Assumes that there will be
+/// more patterns following it, and so it will fail to match if there isn't.
+class LeadingSimplePattern final : public Pattern {
+  friend class SymbolMatcher;
+  SmallVector<StringRef, 2> Patterns;
+protected:
+  LeadingSimplePattern(ArrayRef<StringRef> P)
+   : Pattern(PatternKind::LeadingSimple, P.size()), Patterns(P) {
+    assert(!Patterns.empty());
+  }
+public:
+  PATTERN_CLASSOF(PatternKind::Simple)
+  bool match(ArrayRef<std::string> Names) const override;
+  unsigned requiredCount() const override { return Pattern::Count; }
+};
+
 /// Base for globbing patterns. Globs from the left hand side.
 class GlobPattern : public Pattern {
 protected:
   GlobPattern(PatternKind K) : Pattern(K) {}
   GlobPattern(PatternKind K, unsigned Count) : Pattern(K, Count) {}
+public:
+  static bool classof(const class Pattern* P) {
+    const PatternKind K = P->kind();
+    return K == PatternKind::LeadingGlob
+        || K == PatternKind::ButterflyGlob;
+  }
 private:
   void anchor() override;
 };
 
-/// Simplest glob pattern. For things such as `**::ClassName`.
-class BaseNameOnlyGlobPattern final : public GlobPattern {
-  friend class SymbolMatcher;
-  StringRef Pattern;
-protected:
-  BaseNameOnlyGlobPattern(StringRef P)
-   : GlobPattern(PatternKind::BaseNameOnlyGlob), Pattern(P) {}
-public:
-  PATTERN_CLASSOF(PatternKind::BaseNameOnlyGlob)
-  bool match(ArrayRef<std::string> Names) const override;
-  unsigned requiredCount() const override { return 1; }
-};
-
-/// Glob for things such as `**::x::ClassName`.
-class NestedNameGlobPattern final : public GlobPattern {
+/// Glob for things such as `**::y::Z`.
+class LeadingGlobPattern final : public GlobPattern {
   friend class SymbolMatcher;
   SimplePattern* Nested;
 protected:
-  NestedNameGlobPattern(SimplePattern* P)
-   : GlobPattern(PatternKind::NestedNameGlob), Nested(P) {
+  LeadingGlobPattern(SimplePattern* P)
+   : GlobPattern(PatternKind::LeadingGlob), Nested(P) {
     assert(this->Nested != nullptr);
   }
 public:
-  PATTERN_CLASSOF(PatternKind::NestedNameGlob)
+  PATTERN_CLASSOF(PatternKind::LeadingGlob)
   bool match(ArrayRef<std::string> Names) const override;
   unsigned requiredCount() const override { return Nested->count(); }
 };
 
-MARK_NEEDS_DESTRUCTOR(SimplePattern);
+/// Glob for things such as `x::**::Z`.
+class ButterflyGlobPattern final : public GlobPattern {
+  friend class SymbolMatcher;
+  LeadingSimplePattern* Leading;
+  SimplePattern* Trailing;
+protected:
+  ButterflyGlobPattern(LeadingSimplePattern* L, SimplePattern* T)
+   : GlobPattern(PatternKind::ButterflyGlob), Leading(L), Trailing(T) {
+    assert(this->Leading && this->Trailing);
+  }
+public:
+  PATTERN_CLASSOF(PatternKind::ButterflyGlob)
+  bool match(ArrayRef<std::string> Names) const override;
+  unsigned requiredCount() const override {
+    return Leading->count() + Trailing->count();
+  }
+};
 
-static_assert(pattern_needs_destructor_called_v<SimplePattern>);
-static_assert(pattern_needs_destructor_called_v<const SimplePattern>);
-static_assert(!pattern_needs_destructor_called_v<NestedNameGlobPattern>);
+MARK_NEEDS_DESTRUCTOR(SimplePattern);
 
 #undef MARK_NEEDS_DESTRUCTOR
 #undef PATTERN_CLASSOF

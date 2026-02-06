@@ -110,23 +110,38 @@ bool SimplePattern::match(ArrayRef<std::string> Names) const {
   if (Patterns.size() != Names.size())
     return false;
   ArrayRef Pats(Patterns);
-  for (size_t I = 0; I < Names.size(); ++I)
+  for (size_t I = 0; I < Pats.size(); ++I)
     if (Pats[I] != Names[I])
       return false;
   return true;
 }
 
-bool BaseNameOnlyGlobPattern::match(ArrayRef<std::string> Names) const {
-  assert(!Names.empty() && "Invalid glob input");
-  return Names.back() == this->Pattern;
+bool LeadingSimplePattern::match(ArrayRef<std::string> Names) const {
+  if (Patterns.size() >= Names.size())
+    return false;
+  ArrayRef Pats(Patterns);
+  for (size_t I = 0; I < Pats.size(); ++I)
+    if (Pats[I] != Names[I])
+      return false;
+  return true;
 }
 
-bool NestedNameGlobPattern::match(ArrayRef<std::string> Names) const {
+bool LeadingGlobPattern::match(ArrayRef<std::string> Names) const {
   assert(!Names.empty() && "Invalid glob input");
   if (Names.size() < Nested->count())
     return false;
   return Nested->match(
     Names.take_back(Nested->count()));
+}
+
+bool ButterflyGlobPattern::match(ArrayRef<std::string> Names) const {
+  assert(!Names.empty() && "Invalid glob input");
+  if (Names.size() < requiredCount())
+    return false;
+  if (!Leading->match(Names))
+    return false;
+  return Trailing->match(
+    Names.take_back(Trailing->count()));
 }
 
 //============================================================================//
