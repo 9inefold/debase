@@ -23,7 +23,11 @@
 
 #pragma once
 
+#include "llvm/ADT/PointerSumType.h"
+#include "llvm/Support/Allocator.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/Regex.h"
+#include "llvm/Support/TrailingObjects.h"
 #include "LLVM.hpp"
 #include "SymbolFeatures.hpp"
 #include <concepts>
@@ -31,6 +35,7 @@
 
 namespace debase_tool {
 
+class FilePropertyCache;
 class SymbolMatcher;
 class Pattern;
 
@@ -57,6 +62,9 @@ enum class PatternKind : unsigned {
   LeadingSimple,  // eg. `[x::y]::**::Z`
   LeadingGlob,    // eg. `**::y::Z`
   ButterflyGlob,  // eg. `x::**::Z`
+  SingleSequence,
+  Solo,
+  Regex,
 };
 
 /// The base of symbol matching types.
@@ -68,7 +76,7 @@ public:
 
 protected:
   /// The `Kind` of `Pattern` `this` is.
-  PatternKind Kind = PatternKind::Unknown;
+  const PatternKind Kind;
   /// The amount of patterns contained in `this`.
   unsigned Count = VARIABLE_COUNT;
   /// Constructs pattern with undefined count.
@@ -77,13 +85,6 @@ protected:
   Pattern(PatternKind K, unsigned Count) : Kind(K), Count(Count) {}
 
 public:
-  /// Match against a (possibly partial) set of features.
-  virtual bool match(ArrayRef<std::string> Names) const = 0;
-  /// Match against a set of features.
-  bool match(this const Pattern& self, const SymbolFeatures& F) {
-    return self.match(F.NestedNames);
-  }
-
   /// Returns the kind of `this`.
   PatternKind kind() const { return this->Kind; }
   /// Returns the pattern count.
@@ -102,11 +103,6 @@ public:
     llvm_unreachable("got VARIABLE_COUNT in requiredCount(), override this");
   }
 
-  /// If the class has any complex behaviour.
-  //virtual bool isSimple() const { return false; }
-  /// If the class needs to be regenerated for every file.
-  //virtual bool isFinal() const { return true; }
-
   /// Virtual destructor.
   virtual ~Pattern() = default;
 
@@ -114,43 +110,132 @@ private:
   virtual void anchor();
 };
 
-/// The simplest pattern type.
-class SimplePattern final : public Pattern {
-  friend class SymbolMatcher;
-  SmallVector<StringRef, 2> Patterns;
+/// Pattern that operates over multiple pieces at once.
+class MultiPattern : public Pattern {
 protected:
-  SimplePattern(ArrayRef<StringRef> P)
-   : Pattern(PatternKind::Simple, P.size()), Patterns(P) {
-    assert(!Patterns.empty());
-  }
+  MultiPattern(PatternKind K) : Pattern(K) {}
+  MultiPattern(PatternKind K, unsigned Count) : Pattern(K, Count) {}
+
 public:
-  PATTERN_CLASSOF(PatternKind::Simple)
-  bool match(ArrayRef<std::string> Names) const override;
-  unsigned requiredCount() const override { return Pattern::Count; }
-  //bool isSimple() const override { return true; }
+  /// Match against a (possibly partial) set of features.
+  virtual bool match(ArrayRef<std::string> Names) const = 0;
+  /// Match against a set of features.
+  bool match(this auto& self, const SymbolFeatures& F) {
+    return self.match(F.NestedNames);
+  }
+
+private:
+  void anchor() override;
 };
 
+/// Pattern that operates on a single piece.
+class SinglePattern : public Pattern {
+  //friend class SymbolMatcher;
+  using Pattern::Count;
+protected:
+  SinglePattern(PatternKind K) : Pattern(K, 1) {}
+public:
+  /// Match against a single feature.
+  virtual bool match(StringRef Name) const = 0;
+  /// Returns the current required count.
+  unsigned requiredCount() const override final { return 1; }
+
+private:
+  void anchor() override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Multi
+
+/// The simplest pattern type.
+class SimplePattern final
+    : public MultiPattern,
+      private llvm::TrailingObjects<SimplePattern, StringRef> {
+  friend class TrailingObjects;
+protected:
+  SimplePattern(ArrayRef<StringRef> P);
+  ArrayRef<StringRef> getPatterns() const;
+public:
+  PATTERN_CLASSOF(PatternKind::Simple)
+  using TrailingObjects::OverloadToken;
+  static SimplePattern* New(llvm::BumpPtrAllocator& BP, ArrayRef<StringRef> P);
+  bool match(ArrayRef<std::string> Names) const override;
+  unsigned requiredCount() const override { return Pattern::Count; }
+  unsigned numTrailingObjects(OverloadToken<StringRef>) const {
+    return Pattern::Count;
+  }
+};
+
+#if 0
 /// A pattern type for cases such as `[x::y]::**::Z`. Assumes that there will be
 /// more patterns following it, and so it will fail to match if there isn't.
-class LeadingSimplePattern final : public Pattern {
+class LeadingSimplePattern final : public MultiPattern {
   friend class SymbolMatcher;
   SmallVector<StringRef, 2> Patterns;
 protected:
+  LeadingSimplePattern()
+   : MultiPattern(PatternKind::LeadingSimple, 0) {}
   LeadingSimplePattern(ArrayRef<StringRef> P)
-   : Pattern(PatternKind::LeadingSimple, P.size()), Patterns(P) {
+   : MultiPattern(PatternKind::LeadingSimple, P.size()), Patterns(P) {
     assert(!Patterns.empty());
   }
+  void add(StringRef Pattern) {
+    Patterns.push_back(Pattern);
+    ++Pattern::Count;
+  }
 public:
-  PATTERN_CLASSOF(PatternKind::Simple)
+  PATTERN_CLASSOF(PatternKind::LeadingSimple)
   bool match(ArrayRef<std::string> Names) const override;
   unsigned requiredCount() const override { return Pattern::Count; }
+};
+#else
+/// A pattern type for cases such as `[x::y]::**::Z`. Assumes that there will be
+/// more patterns following it, and so it will fail to match if there isn't.
+class LeadingSimplePattern final
+    : public MultiPattern,
+      private llvm::TrailingObjects<LeadingSimplePattern, StringRef> {
+  friend class TrailingObjects;
+protected:
+  LeadingSimplePattern(ArrayRef<StringRef> P);
+  ArrayRef<StringRef> getPatterns() const;
+public:
+  PATTERN_CLASSOF(PatternKind::LeadingSimple)
+  using TrailingObjects::OverloadToken;
+  static LeadingSimplePattern* New(llvm::BumpPtrAllocator& BP, ArrayRef<StringRef> P);
+  bool match(ArrayRef<std::string> Names) const override;
+  unsigned requiredCount() const override { return Pattern::Count; }
+  unsigned numTrailingObjects(OverloadToken<StringRef>) const {
+    return Pattern::Count;
+  }
+};
+#endif
+
+/// Matches against multiple single operation patterns.
+class SingleSequencePattern final : public MultiPattern {
+  friend class SymbolMatcher;
+  SmallVector<SinglePattern*, 2> Patterns;
+protected:
+  SingleSequencePattern()
+   : MultiPattern(PatternKind::SingleSequence, 0) {}
+  SingleSequencePattern(ArrayRef<SinglePattern*> Ps)
+   : MultiPattern(PatternKind::SingleSequence, Ps.size()), Patterns(Ps) {
+  }
+  void add(SinglePattern* Pattern) {
+    assert(Pattern != nullptr);
+    Patterns.push_back(Pattern);
+    ++Pattern::Count;
+  }
+public:
+  PATTERN_CLASSOF(PatternKind::SingleSequence)
+  bool match(ArrayRef<std::string> Names) const override;
 };
 
 /// Base for globbing patterns. Globs from the left hand side.
-class GlobPattern : public Pattern {
+class GlobPattern : public MultiPattern {
+  friend class SymbolMatcher;
 protected:
-  GlobPattern(PatternKind K) : Pattern(K) {}
-  GlobPattern(PatternKind K, unsigned Count) : Pattern(K, Count) {}
+  GlobPattern(PatternKind K) : MultiPattern(K) {}
+  GlobPattern(PatternKind K, unsigned Count) : MultiPattern(K, Count) {}
 public:
   static bool classof(const class Pattern* P) {
     const PatternKind K = P->kind();
@@ -194,9 +279,105 @@ public:
   }
 };
 
+/// **::x{file.stem}::**::y::/Zt?/
+/// x{file.stem}::**::y::**::/Zt?/
+/// w::/x+/::y::/Z+/
+
+////////////////////////////////////////////////////////////////////////////////
+// Single
+
+/// Matches against a single expression.
+class SoloPattern final : public SinglePattern {
+  friend class SymbolMatcher;
+  StringRef P;
+protected:
+  SoloPattern() : SinglePattern(PatternKind::Solo) {}
+  SoloPattern(StringRef P)
+   : SinglePattern(PatternKind::Solo), P(P) {
+    assert(!P.empty());
+  }
+public:
+  PATTERN_CLASSOF(PatternKind::Solo)
+  void replace(StringRef P) { this->P = P; }
+  bool match(StringRef Name) const override {
+    return this->P == Name;
+  }
+private:
+  void anchor() override;
+};
+
+/// Matches against a regular expression.
+class RegexPattern final : public SinglePattern {
+  friend class SymbolMatcher;
+  std::optional<llvm::Regex> RegExp;
+protected:
+  RegexPattern() : SinglePattern(PatternKind::Regex) {}
+  RegexPattern(StringRef RegExp)
+   : SinglePattern(PatternKind::Regex), RegExp(RegExp) {
+    assert(!RegExp.empty());
+  }
+public:
+  PATTERN_CLASSOF(PatternKind::Regex)
+  void replace(StringRef RegExp) {
+    this->RegExp.emplace(RegExp);
+  }
+  bool match(StringRef Name) const override {
+    return RegExp->match(Name);
+  }
+private:
+  void anchor() override;
+};
+
 MARK_NEEDS_DESTRUCTOR(SimplePattern);
+MARK_NEEDS_DESTRUCTOR(SingleSequencePattern);
+MARK_NEEDS_DESTRUCTOR(RegexPattern);
 
 #undef MARK_NEEDS_DESTRUCTOR
 #undef PATTERN_CLASSOF
+
+////////////////////////////////////////////////////////////////////////////////
+// Replacer
+
+/// The interface for replacable data.
+class Replacer {
+  struct ReplacerPiece {
+    const char* Lit = nullptr;
+    unsigned Size = 0;
+    bool IsFormat = 0;
+  };
+
+  // Add format object.
+  SmallVector<ReplacerPiece, 2> Pieces;
+
+  /// Parses tokens into a replacement vector.
+  static SmallVector<ReplacerPiece, 2>
+   ParseToks(ArrayRef<Pattern::Token> Toks);
+
+public:
+  Replacer(ArrayRef<Pattern::Token> Toks) : Pieces(ParseToks(Toks)) {}
+  virtual ~Replacer() = default;
+  llvm::Error replace(llvm::BumpPtrAllocator& BP, FilePropertyCache& C);
+
+private:
+  virtual void replaceData(StringRef S) = 0;
+  virtual bool isRegex() const = 0;
+  virtual void anchor();
+};
+
+/// Holds data for replacements.
+template <std::derived_from<SinglePattern> T>
+class ReplacerStorage final : public Replacer {
+  friend class SymbolMatcher;
+  T ThePattern;
+  ReplacerStorage(ArrayRef<Pattern::Token> Toks)
+   : Replacer(Toks), ThePattern() {}
+private:
+  void replaceData(StringRef S) override {
+    ThePattern.replace(S);
+  }
+  bool isRegex() const override {
+    return std::same_as<T, RegexPattern>;
+  }
+};
 
 } // namespace debase_tool

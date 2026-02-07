@@ -25,13 +25,13 @@
 #include "PatternLex.hpp"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Compiler.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/StringSaver.h"
 #include "Character.hpp"
 #include "FilePropertyCache.hpp"
@@ -46,6 +46,15 @@ static_assert(sizeof(Token) <= 2 * sizeof(void*));
 
 static Error MakeError(const Twine& Msg) {
   return createStringError(llvm::inconvertibleErrorCode(), Msg);
+}
+
+static StringRef InternStringRef(BumpPtrAllocator& BP, StringRef S) {
+  if (S.empty())
+    return "";
+  char* Out = BP.Allocate<char>(S.size() + 1);
+  std::memcpy(Out, S.data(), S.size());
+  Out[S.size()] = '\0';
+  return {Out, S.size()};
 }
 
 /// Identifies `@` or `**`, otherwise `KUnknown`.
@@ -106,20 +115,60 @@ static bool IsValidPOSIXMetaclass(StringRef CC) {
 // Pattern
 //============================================================================//
 
+ArrayRef<StringRef> SimplePattern::getPatterns() const {
+  const StringRef* Trailing = getTrailingObjects<StringRef>();
+  return ArrayRef(Trailing, Trailing + Pattern::Count);
+}
+
+SimplePattern::SimplePattern(ArrayRef<StringRef> P)
+    : MultiPattern(PatternKind::Simple, P.size()) {
+  assert(P.size() == numTrailingObjects(OverloadToken<StringRef>{}));
+  StringRef* Trailing = getTrailingObjects<StringRef>();
+  std::copy(P.begin(), P.end(), Trailing);
+}
+
+SimplePattern* SimplePattern::New(BumpPtrAllocator& BP, ArrayRef<StringRef> P) {
+  assert(!P.empty() && "Invalid SimplePattern!");
+  void* Mem = BP.Allocate(
+    totalSizeToAlloc<StringRef>(P.size()),
+    alignof(SimplePattern));
+  return new (Mem) SimplePattern(P);
+}
+
 bool SimplePattern::match(ArrayRef<std::string> Names) const {
-  if (Patterns.size() != Names.size())
+  if (requiredCount() != Names.size())
     return false;
-  ArrayRef Pats(Patterns);
+  auto Pats = getPatterns();
   for (size_t I = 0; I < Pats.size(); ++I)
     if (Pats[I] != Names[I])
       return false;
   return true;
 }
 
+ArrayRef<StringRef> LeadingSimplePattern::getPatterns() const {
+  const StringRef* Trailing = getTrailingObjects<StringRef>();
+  return ArrayRef(Trailing, Trailing + Pattern::Count);
+}
+
+LeadingSimplePattern::LeadingSimplePattern(ArrayRef<StringRef> P)
+    : MultiPattern(PatternKind::LeadingSimple, P.size()) {
+  assert(P.size() == numTrailingObjects(OverloadToken<StringRef>{}));
+  StringRef* Trailing = getTrailingObjects<StringRef>();
+  std::copy(P.begin(), P.end(), Trailing);
+}
+
+LeadingSimplePattern* LeadingSimplePattern::New(BumpPtrAllocator& BP, ArrayRef<StringRef> P) {
+  assert(!P.empty() && "Invalid LeadingSimplePattern!");
+  void* Mem = BP.Allocate(
+    totalSizeToAlloc<StringRef>(P.size()),
+    alignof(LeadingSimplePattern));
+  return new (Mem) LeadingSimplePattern(P);
+}
+
 bool LeadingSimplePattern::match(ArrayRef<std::string> Names) const {
-  if (Patterns.size() >= Names.size())
+  if (requiredCount() >= Names.size())
     return false;
-  ArrayRef Pats(Patterns);
+  auto Pats = getPatterns();
   for (size_t I = 0; I < Pats.size(); ++I)
     if (Pats[I] != Names[I])
       return false;
@@ -136,12 +185,75 @@ bool LeadingGlobPattern::match(ArrayRef<std::string> Names) const {
 
 bool ButterflyGlobPattern::match(ArrayRef<std::string> Names) const {
   assert(!Names.empty() && "Invalid glob input");
-  if (Names.size() < requiredCount())
-    return false;
   if (!Leading->match(Names))
     return false;
   return Trailing->match(
     Names.take_back(Trailing->count()));
+}
+
+bool SingleSequencePattern::match(ArrayRef<std::string> Names) const {
+  assert(!Names.empty() && "Invalid input");
+  if (Patterns.size() != Names.size())
+    return false;
+  for (size_t I = 0; I < Patterns.size(); ++I)
+    if (!Patterns[I]->match(Names[I]))
+      return false;
+  return true;
+}
+
+// Replacer
+
+/// Parses tokens into a replacement vector.
+SmallVector<Replacer::ReplacerPiece, 2>
+ Replacer::ParseToks(ArrayRef<Pattern::Token> Toks) {
+  assert(!Toks.empty() && Toks[0].trailing == Toks.size() - 1);
+  Pattern::Token Head = Toks[0];
+  ArrayRef<Pattern::Token> Trailing = Toks.drop_front();
+  /// Parse with LLVM methods.
+  auto TmpReplacements = formatv_object_base::parseFormatString(Head.str());
+  SmallVector<ReplacerPiece, 2> OutReplacements;
+  OutReplacements.reserve(TmpReplacements.size());
+
+  auto AddReplacement = [&] (StringRef Val, bool IsFmt) {
+    OutReplacements.push_back({
+      .Lit = Val.data(),
+      .Size = unsigned(Val.size()),
+      .IsFormat = IsFmt
+    });
+  };
+
+  for (const ReplacementItem& RI : TmpReplacements) {
+    if (RI.Type == ReplacementType::Empty)
+      continue;
+    else if (RI.Type == ReplacementType::Literal) {
+      AddReplacement(RI.Spec, false);
+      continue;
+    }
+    assert(RI.Index < Trailing.size());
+    AddReplacement(Trailing[RI.Index].str(), true);
+  }
+
+  return OutReplacements;
+}
+
+Error Replacer::replace(llvm::BumpPtrAllocator& BP, FilePropertyCache& C) {
+  SmallString<32> Format;
+  for (ReplacerPiece RP : Pieces) {
+    StringRef S(RP.Lit, RP.Size);
+    if (RP.IsFormat) {
+      Expected<StringRef> Prop = C.getProperty(S);
+      if (LLVM_UNLIKELY(!Prop))
+        return Prop.takeError();
+      Format.append(*Prop);
+    } else
+      Format.append(S);
+  }
+  
+  StringRef ToReplace = Format.str();
+  if (!this->isRegex())
+    ToReplace = InternStringRef(BP, ToReplace);
+  this->replaceData(ToReplace);
+  return Error::success();
 }
 
 //============================================================================//
@@ -942,15 +1054,16 @@ Error debase_tool::lexTokensForPattern(StringRef Pat,
 Error debase_tool::lexTokensForPattern(StringRef Pat,
                                        SmallVectorImpl<Pattern::Token>& Toks,
                                        BumpPtrAllocator& BP, FilePropertyCache* This) {
-  return lexTokensForPattern(Pat, Toks, [&BP](StringRef S) -> StringRef {
-    if (S.empty())
-      return "";
-    char* Out = BP.Allocate<char>(S.size() + 1);
-    std::memcpy(Out, S.data(), S.size());
-    Out[S.size()] = '\0';
-    return {Out, S.size()};
+  return lexTokensForPattern(Pat, Toks,
+   [&BP](StringRef S) -> StringRef {
+    return InternStringRef(BP, S);
   }, This);
 }
 
 void Pattern::anchor() {}
+void MultiPattern::anchor() {}
+void SinglePattern::anchor() {}
 void GlobPattern::anchor() {}
+void SoloPattern::anchor() {}
+void RegexPattern::anchor() {}
+void Replacer::anchor() {}
