@@ -128,6 +128,55 @@ private:
   void anchor() override;
 };
 
+/// Implements the interface for a trailing class.
+#define PATTERN_TRAILING_I(VALUE_T, ...)                        \
+private:                                                        \
+  friend class __VA_ARGS__;                                     \
+  using __VA_ARGS__::getPatterns;                               \
+  using __VA_ARGS__::MultiTrailingPattern;                      \
+public:                                                         \
+  using __VA_ARGS__::New;                                       \
+  using __VA_ARGS__::OverloadToken;                             \
+  unsigned numTrailingObjects(OverloadToken<VALUE_T>) const {   \
+    return Pattern::Count;                                      \
+  }                                                             \
+private:
+/// Defines the interface for a trailing class.
+#define PATTERN_TRAILING(KIND, VALUE_T)                         \
+ PATTERN_TRAILING_I(VALUE_T,                                    \
+  MultiTrailingPattern<                                         \
+    KIND##Pattern, PatternKind::KIND, VALUE_T>)
+
+/// Helper type for creating `MultiPattern`s with trailing objects.
+template <class Derived, PatternKind KIND, typename ValT>
+class MultiTrailingPattern
+    : public MultiPattern,
+      protected llvm::TrailingObjects<Derived, ValT> {
+  using BaseT = llvm::TrailingObjects<Derived, ValT>;
+public:
+  friend class llvm::TrailingObjects<Derived, ValT>;
+  using llvm::TrailingObjects<Derived, ValT>::OverloadToken;
+protected:
+  MultiTrailingPattern(ArrayRef<ValT> P) : MultiPattern(KIND, P.size()) {
+    assert(P.size() == Pattern::Count);
+    ValT* Trailing = BaseT::template getTrailingObjects<ValT>();
+    std::copy(P.begin(), P.end(), Trailing);
+  }
+  ArrayRef<ValT> getPatterns() const {
+    const ValT* Trailing = BaseT::template getTrailingObjects<ValT>();
+    return ArrayRef(Trailing, Trailing + Pattern::Count);
+  }
+public:
+  static Derived* New(llvm::BumpPtrAllocator& BP, ArrayRef<ValT> P) {
+    assert(!P.empty() && "Invalid Pattern!");
+    void* Mem = BP.Allocate(
+      BaseT::template totalSizeToAlloc<ValT>(P.size()),
+      alignof(Derived));
+    return new (Mem) Derived(P);
+  }
+  unsigned requiredCount() const override final { return Pattern::Count; }
+};
+
 /// Pattern that operates on a single piece.
 class SinglePattern : public Pattern {
   //friend class SymbolMatcher;
@@ -147,6 +196,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 // Multi
 
+#if 0
 /// The simplest pattern type.
 class SimplePattern final
     : public MultiPattern,
@@ -166,29 +216,6 @@ public:
   }
 };
 
-#if 0
-/// A pattern type for cases such as `[x::y]::**::Z`. Assumes that there will be
-/// more patterns following it, and so it will fail to match if there isn't.
-class LeadingSimplePattern final : public MultiPattern {
-  friend class SymbolMatcher;
-  SmallVector<StringRef, 2> Patterns;
-protected:
-  LeadingSimplePattern()
-   : MultiPattern(PatternKind::LeadingSimple, 0) {}
-  LeadingSimplePattern(ArrayRef<StringRef> P)
-   : MultiPattern(PatternKind::LeadingSimple, P.size()), Patterns(P) {
-    assert(!Patterns.empty());
-  }
-  void add(StringRef Pattern) {
-    Patterns.push_back(Pattern);
-    ++Pattern::Count;
-  }
-public:
-  PATTERN_CLASSOF(PatternKind::LeadingSimple)
-  bool match(ArrayRef<std::string> Names) const override;
-  unsigned requiredCount() const override { return Pattern::Count; }
-};
-#else
 /// A pattern type for cases such as `[x::y]::**::Z`. Assumes that there will be
 /// more patterns following it, and so it will fail to match if there isn't.
 class LeadingSimplePattern final
@@ -208,7 +235,6 @@ public:
     return Pattern::Count;
   }
 };
-#endif
 
 /// Matches against multiple single operation patterns.
 class SingleSequencePattern final : public MultiPattern {
@@ -229,6 +255,41 @@ public:
   PATTERN_CLASSOF(PatternKind::SingleSequence)
   bool match(ArrayRef<std::string> Names) const override;
 };
+#else
+/// The simplest pattern type.
+class SimplePattern final
+    : public MultiTrailingPattern<
+               SimplePattern, PatternKind::Simple,
+               StringRef> {
+  PATTERN_TRAILING(Simple, StringRef)
+public:
+  PATTERN_CLASSOF(PatternKind::Simple)
+  bool match(ArrayRef<std::string> Names) const override;
+};
+
+/// A pattern type for cases such as `[x::y]::**::Z`. Assumes that there will be
+/// more patterns following it, and so it will fail to match if there isn't.
+class LeadingSimplePattern final
+    : public MultiTrailingPattern<
+               LeadingSimplePattern, PatternKind::LeadingSimple,
+               StringRef> {
+  PATTERN_TRAILING(LeadingSimple, StringRef)
+public:
+  PATTERN_CLASSOF(PatternKind::LeadingSimple)
+  bool match(ArrayRef<std::string> Names) const override;
+};
+
+/// Matches against multiple single operation patterns.
+class SingleSequencePattern final
+    : public MultiTrailingPattern<
+               SingleSequencePattern, PatternKind::SingleSequence,
+               SinglePattern*> {
+  PATTERN_TRAILING(SingleSequence, SinglePattern*)
+public:
+  PATTERN_CLASSOF(PatternKind::SingleSequence)
+  bool match(ArrayRef<std::string> Names) const override;
+};
+#endif
 
 /// Base for globbing patterns. Globs from the left hand side.
 class GlobPattern : public MultiPattern {
@@ -328,9 +389,12 @@ private:
   void anchor() override;
 };
 
-MARK_NEEDS_DESTRUCTOR(SimplePattern);
-MARK_NEEDS_DESTRUCTOR(SingleSequencePattern);
+//MARK_NEEDS_DESTRUCTOR(SimplePattern);
+//MARK_NEEDS_DESTRUCTOR(SingleSequencePattern);
 MARK_NEEDS_DESTRUCTOR(RegexPattern);
+
+#undef PATTERN_TRAILING
+#undef PATTERN_TRAILING_I
 
 #undef MARK_NEEDS_DESTRUCTOR
 #undef PATTERN_CLASSOF

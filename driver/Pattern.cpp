@@ -115,6 +115,7 @@ static bool IsValidPOSIXMetaclass(StringRef CC) {
 // Pattern
 //============================================================================//
 
+#if 0
 ArrayRef<StringRef> SimplePattern::getPatterns() const {
   const StringRef* Trailing = getTrailingObjects<StringRef>();
   return ArrayRef(Trailing, Trailing + Pattern::Count);
@@ -134,17 +135,19 @@ SimplePattern* SimplePattern::New(BumpPtrAllocator& BP, ArrayRef<StringRef> P) {
     alignof(SimplePattern));
   return new (Mem) SimplePattern(P);
 }
+#endif
 
 bool SimplePattern::match(ArrayRef<std::string> Names) const {
   if (requiredCount() != Names.size())
     return false;
-  auto Pats = getPatterns();
-  for (size_t I = 0; I < Pats.size(); ++I)
-    if (Pats[I] != Names[I])
+  auto Patterns = getPatterns();
+  for (size_t I = 0; I < Patterns.size(); ++I)
+    if (Patterns[I] != Names[I])
       return false;
   return true;
 }
 
+#if 0
 ArrayRef<StringRef> LeadingSimplePattern::getPatterns() const {
   const StringRef* Trailing = getTrailingObjects<StringRef>();
   return ArrayRef(Trailing, Trailing + Pattern::Count);
@@ -164,13 +167,24 @@ LeadingSimplePattern* LeadingSimplePattern::New(BumpPtrAllocator& BP, ArrayRef<S
     alignof(LeadingSimplePattern));
   return new (Mem) LeadingSimplePattern(P);
 }
+#endif
 
 bool LeadingSimplePattern::match(ArrayRef<std::string> Names) const {
   if (requiredCount() >= Names.size())
     return false;
-  auto Pats = getPatterns();
-  for (size_t I = 0; I < Pats.size(); ++I)
-    if (Pats[I] != Names[I])
+  auto Patterns = getPatterns();
+  for (size_t I = 0; I < Patterns.size(); ++I)
+    if (Patterns[I] != Names[I])
+      return false;
+  return true;
+}
+
+bool SingleSequencePattern::match(ArrayRef<std::string> Names) const {
+  auto Patterns = getPatterns();
+  if (Patterns.size() != Names.size())
+    return false;
+  for (size_t I = 0; I < Patterns.size(); ++I)
+    if (!Patterns[I]->match(Names[I]))
       return false;
   return true;
 }
@@ -189,16 +203,6 @@ bool ButterflyGlobPattern::match(ArrayRef<std::string> Names) const {
     return false;
   return Trailing->match(
     Names.take_back(Trailing->count()));
-}
-
-bool SingleSequencePattern::match(ArrayRef<std::string> Names) const {
-  assert(!Names.empty() && "Invalid input");
-  if (Patterns.size() != Names.size())
-    return false;
-  for (size_t I = 0; I < Patterns.size(); ++I)
-    if (!Patterns[I]->match(Names[I]))
-      return false;
-  return true;
 }
 
 // Replacer
