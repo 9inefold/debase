@@ -32,6 +32,7 @@ class FilePropertyCache {
 public:
   FilePropertyCache(StringRef file) : filename(file) {}
   Expected<StringRef> getProperty(StringRef prop);
+  Expected<StringRef> getPropertyRaw(const char* prop);
 };
 
 } // namespace debase_tool

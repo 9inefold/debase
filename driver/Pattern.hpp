@@ -33,6 +33,9 @@
 #include <concepts>
 #include <optional>
 
+#undef LLVM_ENABLE_DUMP
+#define LLVM_ENABLE_DUMP 1
+
 namespace debase_tool {
 
 class FilePropertyCache;
@@ -63,6 +66,7 @@ enum class PatternKind : unsigned {
   LeadingGlob,    // eg. `**::y::Z`
   ButterflyGlob,  // eg. `x::**::Z`
   SingleSequence,
+  AnySequence,
   Solo,
   Regex,
 };
@@ -106,6 +110,7 @@ public:
   /// Virtual destructor.
   virtual ~Pattern() = default;
 
+  virtual void print(raw_ostream& OS) const = 0;
 private:
   virtual void anchor();
 };
@@ -117,13 +122,17 @@ protected:
   MultiPattern(PatternKind K, unsigned Count) : Pattern(K, Count) {}
 
 public:
+  static bool classof(const class Pattern* P) {
+    const PatternKind K = P->kind();
+    return K != PatternKind::Solo
+        && K != PatternKind::Regex;
+  }
   /// Match against a (possibly partial) set of features.
   virtual bool match(ArrayRef<std::string> Names) const = 0;
   /// Match against a set of features.
   bool match(this auto& self, const SymbolFeatures& F) {
     return self.match(F.NestedNames);
   }
-
 private:
   void anchor() override;
 };
@@ -142,10 +151,12 @@ public:                                                         \
   }                                                             \
 private:
 /// Defines the interface for a trailing class.
-#define PATTERN_TRAILING(KIND, VALUE_T)                         \
+#define PATTERN_TRAILING_X(TYPE, KIND, VALUE_T)                 \
  PATTERN_TRAILING_I(VALUE_T,                                    \
-  MultiTrailingPattern<                                         \
-    KIND##Pattern, PatternKind::KIND, VALUE_T>)
+  MultiTrailingPattern<TYPE, KIND, VALUE_T>)
+/// Defines the interface for a trailing class.
+#define PATTERN_TRAILING(KIND, VALUE_T)                         \
+ PATTERN_TRAILING_X(KIND##Pattern, PatternKind::KIND, VALUE_T)
 
 /// Helper type for creating `MultiPattern`s with trailing objects.
 template <class Derived, PatternKind KIND, typename ValT>
@@ -158,6 +169,7 @@ public:
   using llvm::TrailingObjects<Derived, ValT>::OverloadToken;
 protected:
   MultiTrailingPattern(ArrayRef<ValT> P) : MultiPattern(KIND, P.size()) {
+    assert(Derived::classof(this) && "Wrong setup!");
     assert(P.size() == Pattern::Count);
     ValT* Trailing = BaseT::template getTrailingObjects<ValT>();
     std::copy(P.begin(), P.end(), Trailing);
@@ -174,7 +186,7 @@ public:
       alignof(Derived));
     return new (Mem) Derived(P);
   }
-  unsigned requiredCount() const override final { return Pattern::Count; }
+  unsigned requiredCount() const override { return Pattern::Count; }
 };
 
 /// Pattern that operates on a single piece.
@@ -184,11 +196,15 @@ class SinglePattern : public Pattern {
 protected:
   SinglePattern(PatternKind K) : Pattern(K, 1) {}
 public:
+  static bool classof(const class Pattern* P) {
+    const PatternKind K = P->kind();
+    return K == PatternKind::Solo
+        || K == PatternKind::Regex;
+  }
   /// Match against a single feature.
   virtual bool match(StringRef Name) const = 0;
   /// Returns the current required count.
   unsigned requiredCount() const override final { return 1; }
-
 private:
   void anchor() override;
 };
@@ -196,66 +212,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 // Multi
 
-#if 0
-/// The simplest pattern type.
-class SimplePattern final
-    : public MultiPattern,
-      private llvm::TrailingObjects<SimplePattern, StringRef> {
-  friend class TrailingObjects;
-protected:
-  SimplePattern(ArrayRef<StringRef> P);
-  ArrayRef<StringRef> getPatterns() const;
-public:
-  PATTERN_CLASSOF(PatternKind::Simple)
-  using TrailingObjects::OverloadToken;
-  static SimplePattern* New(llvm::BumpPtrAllocator& BP, ArrayRef<StringRef> P);
-  bool match(ArrayRef<std::string> Names) const override;
-  unsigned requiredCount() const override { return Pattern::Count; }
-  unsigned numTrailingObjects(OverloadToken<StringRef>) const {
-    return Pattern::Count;
-  }
-};
-
-/// A pattern type for cases such as `[x::y]::**::Z`. Assumes that there will be
-/// more patterns following it, and so it will fail to match if there isn't.
-class LeadingSimplePattern final
-    : public MultiPattern,
-      private llvm::TrailingObjects<LeadingSimplePattern, StringRef> {
-  friend class TrailingObjects;
-protected:
-  LeadingSimplePattern(ArrayRef<StringRef> P);
-  ArrayRef<StringRef> getPatterns() const;
-public:
-  PATTERN_CLASSOF(PatternKind::LeadingSimple)
-  using TrailingObjects::OverloadToken;
-  static LeadingSimplePattern* New(llvm::BumpPtrAllocator& BP, ArrayRef<StringRef> P);
-  bool match(ArrayRef<std::string> Names) const override;
-  unsigned requiredCount() const override { return Pattern::Count; }
-  unsigned numTrailingObjects(OverloadToken<StringRef>) const {
-    return Pattern::Count;
-  }
-};
-
-/// Matches against multiple single operation patterns.
-class SingleSequencePattern final : public MultiPattern {
-  friend class SymbolMatcher;
-  SmallVector<SinglePattern*, 2> Patterns;
-protected:
-  SingleSequencePattern()
-   : MultiPattern(PatternKind::SingleSequence, 0) {}
-  SingleSequencePattern(ArrayRef<SinglePattern*> Ps)
-   : MultiPattern(PatternKind::SingleSequence, Ps.size()), Patterns(Ps) {
-  }
-  void add(SinglePattern* Pattern) {
-    assert(Pattern != nullptr);
-    Patterns.push_back(Pattern);
-    ++Pattern::Count;
-  }
-public:
-  PATTERN_CLASSOF(PatternKind::SingleSequence)
-  bool match(ArrayRef<std::string> Names) const override;
-};
-#else
 /// The simplest pattern type.
 class SimplePattern final
     : public MultiTrailingPattern<
@@ -265,6 +221,7 @@ class SimplePattern final
 public:
   PATTERN_CLASSOF(PatternKind::Simple)
   bool match(ArrayRef<std::string> Names) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 /// A pattern type for cases such as `[x::y]::**::Z`. Assumes that there will be
@@ -277,6 +234,7 @@ class LeadingSimplePattern final
 public:
   PATTERN_CLASSOF(PatternKind::LeadingSimple)
   bool match(ArrayRef<std::string> Names) const override;
+  void print(raw_ostream& OS) const override;
 };
 
 /// Matches against multiple single operation patterns.
@@ -288,8 +246,23 @@ class SingleSequencePattern final
 public:
   PATTERN_CLASSOF(PatternKind::SingleSequence)
   bool match(ArrayRef<std::string> Names) const override;
+  void print(raw_ostream& OS) const override;
 };
-#endif
+
+/// Matches against multiple operation patterns.
+class AnySequencePattern final
+    : public MultiTrailingPattern<
+               AnySequencePattern, PatternKind::AnySequence,
+               Pattern*> {
+  unsigned RealCount = 0;
+  PATTERN_TRAILING(AnySequence, Pattern*)
+  AnySequencePattern(ArrayRef<Pattern*> Patterns);
+public:
+  PATTERN_CLASSOF(PatternKind::AnySequence)
+  bool match(ArrayRef<std::string> Names) const override;
+  void print(raw_ostream& OS) const override;
+  unsigned requiredCount() const override final { return RealCount; }
+};
 
 /// Base for globbing patterns. Globs from the left hand side.
 class GlobPattern : public MultiPattern {
@@ -310,33 +283,37 @@ private:
 /// Glob for things such as `**::y::Z`.
 class LeadingGlobPattern final : public GlobPattern {
   friend class SymbolMatcher;
-  SimplePattern* Nested;
+  MultiPattern* Trailing;
 protected:
-  LeadingGlobPattern(SimplePattern* P)
-   : GlobPattern(PatternKind::LeadingGlob), Nested(P) {
-    assert(this->Nested != nullptr);
+  LeadingGlobPattern(MultiPattern* P)
+   : GlobPattern(PatternKind::LeadingGlob), Trailing(P) {
+    assert(this->Trailing != nullptr);
   }
 public:
   PATTERN_CLASSOF(PatternKind::LeadingGlob)
   bool match(ArrayRef<std::string> Names) const override;
-  unsigned requiredCount() const override { return Nested->count(); }
+  void print(raw_ostream& OS) const override;
+  unsigned requiredCount() const override { return Trailing->requiredCount(); }
 };
 
 /// Glob for things such as `x::**::Z`.
 class ButterflyGlobPattern final : public GlobPattern {
   friend class SymbolMatcher;
-  LeadingSimplePattern* Leading;
-  SimplePattern* Trailing;
+  MultiPattern* Leading;
+  MultiPattern* Trailing;
 protected:
-  ButterflyGlobPattern(LeadingSimplePattern* L, SimplePattern* T)
+  ButterflyGlobPattern(MultiPattern* L, MultiPattern* T)
    : GlobPattern(PatternKind::ButterflyGlob), Leading(L), Trailing(T) {
     assert(this->Leading && this->Trailing);
+    assert(Leading->count() != VARIABLE_COUNT);
+    assert(Trailing->count() != VARIABLE_COUNT);
   }
 public:
   PATTERN_CLASSOF(PatternKind::ButterflyGlob)
   bool match(ArrayRef<std::string> Names) const override;
+  void print(raw_ostream& OS) const override;
   unsigned requiredCount() const override {
-    return Leading->count() + Trailing->count();
+    return Leading->requiredCount() + Trailing->requiredCount();
   }
 };
 
@@ -347,9 +324,14 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 // Single
 
+class ProxySoloPattern;
+template <class T> class ReplacerStorage;
+
 /// Matches against a single expression.
 class SoloPattern final : public SinglePattern {
   friend class SymbolMatcher;
+  friend class ProxySoloPattern;
+  template <class> friend class ReplacerStorage;
   StringRef P;
 protected:
   SoloPattern() : SinglePattern(PatternKind::Solo) {}
@@ -363,6 +345,7 @@ public:
   bool match(StringRef Name) const override {
     return this->P == Name;
   }
+  void print(raw_ostream& OS) const override;
 private:
   void anchor() override;
 };
@@ -370,6 +353,7 @@ private:
 /// Matches against a regular expression.
 class RegexPattern final : public SinglePattern {
   friend class SymbolMatcher;
+  template <class> friend class ReplacerStorage;
   std::optional<llvm::Regex> RegExp;
 protected:
   RegexPattern() : SinglePattern(PatternKind::Regex) {}
@@ -385,8 +369,20 @@ public:
   bool match(StringRef Name) const override {
     return RegExp->match(Name);
   }
+  void print(raw_ostream& OS) const override;
 private:
   void anchor() override;
+};
+
+/// Wrapper around `SoloPattern` for replacements.
+class ProxySoloPattern final {
+  SoloPattern P;
+public:
+  ProxySoloPattern() = default;
+  ProxySoloPattern(StringRef P) : P(P) {}
+  void replace(StringRef S) { P.replace(S); }
+  SoloPattern* operator&() & { return &P; }
+  const SoloPattern* operator&() const& { return &P; }
 };
 
 //MARK_NEEDS_DESTRUCTOR(SimplePattern);
@@ -394,6 +390,7 @@ private:
 MARK_NEEDS_DESTRUCTOR(RegexPattern);
 
 #undef PATTERN_TRAILING
+#undef PATTERN_TRAILING_X
 #undef PATTERN_TRAILING_I
 
 #undef MARK_NEEDS_DESTRUCTOR
@@ -404,43 +401,69 @@ MARK_NEEDS_DESTRUCTOR(RegexPattern);
 
 /// The interface for replacable data.
 class Replacer {
-  struct ReplacerPiece {
-    const char* Lit = nullptr;
-    unsigned Size = 0;
-    bool IsFormat = 0;
-  };
-
-  // Add format object.
-  SmallVector<ReplacerPiece, 2> Pieces;
-
-  /// Parses tokens into a replacement vector.
-  static SmallVector<ReplacerPiece, 2>
-   ParseToks(ArrayRef<Pattern::Token> Toks);
-
 public:
-  Replacer(ArrayRef<Pattern::Token> Toks) : Pieces(ParseToks(Toks)) {}
   virtual ~Replacer() = default;
-  llvm::Error replace(llvm::BumpPtrAllocator& BP, FilePropertyCache& C);
+  virtual llvm::Error replace(llvm::BumpPtrAllocator& BP,
+                              FilePropertyCache& C) = 0;
 
-private:
+protected:
   virtual void replaceData(StringRef S) = 0;
   virtual bool isRegex() const = 0;
   virtual void anchor();
 };
 
+/// The interface for formatting replacable data.
+class FmtReplacer : public Replacer {
+  struct ReplacerPiece {
+    const char* Lit = nullptr;
+    unsigned Size = 0;
+    bool IsFormat = 0;
+  };
+  // Add format object.
+  SmallVector<ReplacerPiece, 2> Pieces;
+  /// Parses tokens into a replacement vector.
+  static SmallVector<ReplacerPiece, 2>
+   ParseToks(ArrayRef<Pattern::Token> Toks);
+public:
+  FmtReplacer(ArrayRef<Pattern::Token> Toks) : Pieces(ParseToks(Toks)) {}
+  llvm::Error replace(llvm::BumpPtrAllocator& BP,
+                      FilePropertyCache& C) override final;
+private:
+  void anchor() override;
+};
+
 /// Holds data for replacements.
-template <std::derived_from<SinglePattern> T>
-class ReplacerStorage final : public Replacer {
+template <class T>
+class ReplacerStorage final : public FmtReplacer {
   friend class SymbolMatcher;
+  static_assert(std::derived_from<T, SinglePattern>);
   T ThePattern;
   ReplacerStorage(ArrayRef<Pattern::Token> Toks)
-   : Replacer(Toks), ThePattern() {}
+   : FmtReplacer(Toks), ThePattern() {}
 private:
   void replaceData(StringRef S) override {
     ThePattern.replace(S);
   }
   bool isRegex() const override {
     return std::same_as<T, RegexPattern>;
+  }
+};
+
+/// Holds data for replacements.
+template <>
+class ReplacerStorage<ProxySoloPattern> final : public Replacer {
+  friend class SymbolMatcher;
+  const char* TheProp;
+  ProxySoloPattern ThePattern;
+  ReplacerStorage(Pattern::Token Tok);
+private:
+  llvm::Error replace(llvm::BumpPtrAllocator& BP,
+                      FilePropertyCache& C) override;
+  void replaceData(StringRef S) override {
+    ThePattern.replace(S);
+  }
+  bool isRegex() const override {
+    return false;
   }
 };
 

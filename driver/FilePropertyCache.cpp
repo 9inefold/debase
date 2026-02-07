@@ -25,9 +25,9 @@ using namespace llvm::sys;
 
 using Token = Pattern::Token;
 
-Expected<StringRef> FilePropertyCache::getProperty(StringRef prop) {
+Expected<StringRef> FilePropertyCache::getPropertyRaw(const char* prop) {
   using enum Token::FilePropertyKind;
-  Token::FilePropertyKind K = Token::GetFilePropertyKind(prop.data());
+  Token::FilePropertyKind K = Token::GetFilePropertyKind(prop);
   if (K == FPKUnknown)
     return llvm::createStringError(
         llvm::inconvertibleErrorCode(),
@@ -55,4 +55,8 @@ Expected<StringRef> FilePropertyCache::getProperty(StringRef prop) {
     llvm_unreachable("FPKUnknown here?");
   }
   llvm_unreachable("invalid property name");
+}
+
+Expected<StringRef> FilePropertyCache::getProperty(StringRef prop) {
+  return getPropertyRaw(prop.data());
 }

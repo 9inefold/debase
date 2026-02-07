@@ -33,6 +33,7 @@
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/StringSaver.h"
+#include "llvm/Support/raw_ostream.h"
 #include "Character.hpp"
 #include "FilePropertyCache.hpp"
 #include "NameClassifier.hpp"
@@ -115,28 +116,6 @@ static bool IsValidPOSIXMetaclass(StringRef CC) {
 // Pattern
 //============================================================================//
 
-#if 0
-ArrayRef<StringRef> SimplePattern::getPatterns() const {
-  const StringRef* Trailing = getTrailingObjects<StringRef>();
-  return ArrayRef(Trailing, Trailing + Pattern::Count);
-}
-
-SimplePattern::SimplePattern(ArrayRef<StringRef> P)
-    : MultiPattern(PatternKind::Simple, P.size()) {
-  assert(P.size() == numTrailingObjects(OverloadToken<StringRef>{}));
-  StringRef* Trailing = getTrailingObjects<StringRef>();
-  std::copy(P.begin(), P.end(), Trailing);
-}
-
-SimplePattern* SimplePattern::New(BumpPtrAllocator& BP, ArrayRef<StringRef> P) {
-  assert(!P.empty() && "Invalid SimplePattern!");
-  void* Mem = BP.Allocate(
-    totalSizeToAlloc<StringRef>(P.size()),
-    alignof(SimplePattern));
-  return new (Mem) SimplePattern(P);
-}
-#endif
-
 bool SimplePattern::match(ArrayRef<std::string> Names) const {
   if (requiredCount() != Names.size())
     return false;
@@ -146,28 +125,6 @@ bool SimplePattern::match(ArrayRef<std::string> Names) const {
       return false;
   return true;
 }
-
-#if 0
-ArrayRef<StringRef> LeadingSimplePattern::getPatterns() const {
-  const StringRef* Trailing = getTrailingObjects<StringRef>();
-  return ArrayRef(Trailing, Trailing + Pattern::Count);
-}
-
-LeadingSimplePattern::LeadingSimplePattern(ArrayRef<StringRef> P)
-    : MultiPattern(PatternKind::LeadingSimple, P.size()) {
-  assert(P.size() == numTrailingObjects(OverloadToken<StringRef>{}));
-  StringRef* Trailing = getTrailingObjects<StringRef>();
-  std::copy(P.begin(), P.end(), Trailing);
-}
-
-LeadingSimplePattern* LeadingSimplePattern::New(BumpPtrAllocator& BP, ArrayRef<StringRef> P) {
-  assert(!P.empty() && "Invalid LeadingSimplePattern!");
-  void* Mem = BP.Allocate(
-    totalSizeToAlloc<StringRef>(P.size()),
-    alignof(LeadingSimplePattern));
-  return new (Mem) LeadingSimplePattern(P);
-}
-#endif
 
 bool LeadingSimplePattern::match(ArrayRef<std::string> Names) const {
   if (requiredCount() >= Names.size())
@@ -189,27 +146,66 @@ bool SingleSequencePattern::match(ArrayRef<std::string> Names) const {
   return true;
 }
 
+AnySequencePattern::AnySequencePattern(ArrayRef<Pattern*> Patterns)
+    : MultiTrailingPattern(Patterns), RealCount(0) {
+  for (Pattern* P : getPatterns()) {
+    assert(!isa<GlobPattern>(P));
+    if (auto* MP = dyn_cast<MultiPattern>(P))
+      RealCount += MP->requiredCount();
+    else
+      RealCount += 1;
+  }
+}
+
+bool AnySequencePattern::match(ArrayRef<std::string> Names) const {
+  if (Names.size() < RealCount)
+    return false;
+  for (Pattern* P : getPatterns()) {
+    if (auto* SP = dyn_cast<SinglePattern>(P)) {
+      if (!SP->match(Names.front()))
+        return false;
+      Names = Names.drop_front();
+    } else /*MultiPattern*/ {
+      auto* MP = cast<MultiPattern>(P);
+      const unsigned N = MP->requiredCount();
+      if (!MP->match(Names.take_front(N)))
+        return false;
+      Names = Names.drop_front(N);
+    }
+  }
+  return true;
+}
+
 bool LeadingGlobPattern::match(ArrayRef<std::string> Names) const {
   assert(!Names.empty() && "Invalid glob input");
-  if (Names.size() < Nested->count())
+  const unsigned Count = Trailing->count();
+  if (Names.size() < Count)
     return false;
-  return Nested->match(
-    Names.take_back(Nested->count()));
+  if (auto* Simple = dyn_cast<SimplePattern>(Trailing))
+    return Simple->match(
+             Names.take_back(Count));
+  // Some other type
+  return Trailing->match(
+           Names.take_back(Count));
 }
 
 bool ButterflyGlobPattern::match(ArrayRef<std::string> Names) const {
   assert(!Names.empty() && "Invalid glob input");
-  if (!Leading->match(Names))
+  const unsigned LeadingCount = Leading->count(),
+                 TrailingCount = Trailing->count();
+  if (Names.size() < LeadingCount + TrailingCount)
+    return false;
+  if (!Leading->match(Names.take_front(LeadingCount)))
     return false;
   return Trailing->match(
-    Names.take_back(Trailing->count()));
+    Names.take_back(TrailingCount));
 }
 
 // Replacer
 
 /// Parses tokens into a replacement vector.
-SmallVector<Replacer::ReplacerPiece, 2>
- Replacer::ParseToks(ArrayRef<Pattern::Token> Toks) {
+SmallVector<FmtReplacer::ReplacerPiece, 2>
+ FmtReplacer::ParseToks(ArrayRef<Pattern::Token> Toks) {
   assert(!Toks.empty() && Toks[0].trailing == Toks.size() - 1);
   Pattern::Token Head = Toks[0];
   ArrayRef<Pattern::Token> Trailing = Toks.drop_front();
@@ -240,17 +236,16 @@ SmallVector<Replacer::ReplacerPiece, 2>
   return OutReplacements;
 }
 
-Error Replacer::replace(llvm::BumpPtrAllocator& BP, FilePropertyCache& C) {
+Error FmtReplacer::replace(llvm::BumpPtrAllocator& BP, FilePropertyCache& C) {
   SmallString<32> Format;
   for (ReplacerPiece RP : Pieces) {
-    StringRef S(RP.Lit, RP.Size);
     if (RP.IsFormat) {
-      Expected<StringRef> Prop = C.getProperty(S);
+      Expected<StringRef> Prop = C.getPropertyRaw(RP.Lit);
       if (LLVM_UNLIKELY(!Prop))
         return Prop.takeError();
       Format.append(*Prop);
     } else
-      Format.append(S);
+      Format.append(StringRef(RP.Lit, RP.Size));
   }
   
   StringRef ToReplace = Format.str();
@@ -258,6 +253,62 @@ Error Replacer::replace(llvm::BumpPtrAllocator& BP, FilePropertyCache& C) {
     ToReplace = InternStringRef(BP, ToReplace);
   this->replaceData(ToReplace);
   return Error::success();
+}
+
+ReplacerStorage<ProxySoloPattern>::ReplacerStorage(Pattern::Token Tok)
+    : TheProp(Tok.data), ThePattern() {
+  assert(Token::GetFilePropertyKind(Tok.data) != Token::FPKUnknown);
+}
+
+Error ReplacerStorage<ProxySoloPattern>::replace(BumpPtrAllocator&,
+                                                 FilePropertyCache& C) {
+  Expected<StringRef> Prop = C.getPropertyRaw(TheProp);
+  if (LLVM_UNLIKELY(!Prop))
+    return Prop.takeError();
+  ThePattern.replace(*Prop);
+  return Error::success();
+}
+
+// Printing
+
+void SimplePattern::print(raw_ostream& OS) const {
+  ListSeparator LS("::");
+  for (StringRef S : getPatterns())
+    OS << LS << S;
+}
+void LeadingSimplePattern::print(raw_ostream& OS) const {
+  ListSeparator LS("::");
+  for (StringRef S : getPatterns())
+    OS << LS << S;
+}
+void LeadingGlobPattern::print(raw_ostream& OS) const {
+  OS << "**::";
+  Trailing->print(OS);
+}
+void ButterflyGlobPattern::print(raw_ostream& OS) const {
+  Leading->print(OS);
+  OS << "::**::";
+  Trailing->print(OS);
+}
+void SingleSequencePattern::print(raw_ostream& OS) const {
+  ListSeparator LS("::");
+  for (Pattern* P : getPatterns()) {
+    OS << LS;
+    P->print(OS);
+  }
+}
+void AnySequencePattern::print(raw_ostream& OS) const {
+  ListSeparator LS("::");
+  for (Pattern* P : getPatterns()) {
+    OS << LS;
+    P->print(OS);
+  }
+}
+void SoloPattern::print(raw_ostream& OS) const {
+  OS << this->P;
+}
+void RegexPattern::print(raw_ostream& OS) const {
+  OS << "/REGEX/";
 }
 
 //============================================================================//
@@ -1012,12 +1063,35 @@ Error CompoundLexer::handleRegexError(Character::Kind K) {
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Pattern
+// PatternLex
 
 constexpr char Token::kStem[] = "stem";
 constexpr char Token::kDir[]  = "dir";
 constexpr char Token::kExt[]  = "ext";
+
+static StringRef TokenName(Pattern::Token::Kind K) {
+  using enum Pattern::Token::Kind;
+  switch (K) {
+  case KSimple:
+    return "Simple";
+  case KAnonymous:
+    return "Anonymous";
+  case KGlob:
+    return "Glob";
+  case KRegex:
+    return "Regex";
+  case KThis:
+    return "This";
+  case KLateBind:
+    return "LateBind";
+  case KSimpleFmt:
+    return "SimpleFmt";
+  case KRegexFmt:
+    return "RegexFmt";
+  default:
+    llvm_unreachable("invalid Token::Kind");
+  }
+}
 
 /// Checks if value is a global id, and returns the enum.
 Token::FilePropertyKind Token::GetFilePropertyKind(const char* Str) {
@@ -1064,10 +1138,40 @@ Error debase_tool::lexTokensForPattern(StringRef Pat,
   }, This);
 }
 
+raw_ostream& debase_tool::operator<<(raw_ostream& OS, Pattern::Token Tok) {
+  OS << "<" << TokenName(Tok.kind) << ":'";
+  /*if (Tok.kind == Token::KAnonymous)
+    return OS << "@'>";
+  else*/ if (Tok.kind == Token::KGlob)
+    return OS << "**'>";
+  else
+    return OS << Tok.str() << "'>";
+}
+
+void debase_tool::printTokenGroup(raw_ostream& OS, ArrayRef<Pattern::Token> Toks) {
+  if (!Toks.empty()) {
+    int SkipCount = 0;
+    ListSeparator LS(" :: ");
+    for (Pattern::Token Tok : Toks) {
+      if (SkipCount--) {
+        outs() << Tok << (SkipCount ? ", " : ")");
+        continue;
+      }
+      outs() << LS << Tok;
+      if ((SkipCount = Tok.trailing))
+        outs() << " (";
+    }
+  } else {
+    outs() << "<empty>";
+  }
+}
+
 void Pattern::anchor() {}
 void MultiPattern::anchor() {}
 void SinglePattern::anchor() {}
 void GlobPattern::anchor() {}
 void SoloPattern::anchor() {}
 void RegexPattern::anchor() {}
+
 void Replacer::anchor() {}
+void FmtReplacer::anchor() {}

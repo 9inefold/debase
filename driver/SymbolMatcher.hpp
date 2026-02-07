@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/StringSaver.h"
@@ -33,28 +35,117 @@
 
 namespace debase_tool {
 
+class FilePropertyCache;
+
+/// Utility to help match symbols.
 class SymbolMatcher {
   llvm::BumpPtrAllocator BP;
-  llvm::UniqueStringSaver SS;
+  /// Used to cache pattern mappings.
+  llvm::StringMap<Pattern*, llvm::BumpPtrAllocator&> PatternMappings;
 
   /// The type used to store patterns.
-  using PatternVec = SmallVector<Pattern*, 0>;
+  using PatternStorageTy = llvm::SmallPtrSet<Pattern*, 4>;
   /// Patterns used for matching constructors.
-  PatternVec CtorPatterns;
+  PatternStorageTy CtorPatterns;
   /// Patterns used for matching destructors.
-  PatternVec DtorPatterns;
+  PatternStorageTy DtorPatterns;
 
+  /// Contains the Patterns which need to be destroyed.
+  llvm::SmallPtrSet<Pattern*, 4> ToDestroy;
+  /// Contains replacements
+  SmallVector<Replacer*, 4> Replacements;
+  /// Filename of the current module.
   std::optional<StringRef> CurrentFilename;
 
+  /// If errors can be continued.
+  bool Permissive = false;
+
 public:
-  SymbolMatcher() : SS(BP) {}
+  class JSONLoaderHandler;
+  friend class JSONLoaderHandler;
+
+  SymbolMatcher(bool Permissive = false)
+   : PatternMappings(BP), Permissive(Permissive) {}
+  ~SymbolMatcher();
 
   /// Loads symbol patterns and filenames from a JSON config file.
   llvm::Error loadSymbolsFromJSONFile(StringRef Filename);
 
+  /// TODO: Remove
+  llvm::Error setFilename(StringRef Filename);
+
+  /// Creates a new `Pattern` object if uncached, otherwise returns cached.
+  Expected<Pattern*> compilePattern(
+   StringRef Pat, SmallVectorImpl<Pattern::Token>* ToksBuf = nullptr);
+
+private:
+  struct TokenGroup {
+    const Pattern::Token* Tok = nullptr;
+    unsigned Count = 0;
+    bool AllSimple   : 1 = false;
+    bool Replacement : 1 = false;
+    bool LeadingGlob : 1 = false;
+    //bool TrailingGlob : 1 = false;
+  public:
+    inline ArrayRef<Pattern::Token> arr() const;
+  };
+
+  /// Splits `Pattern::Token`s into `TokenGroup`s.
+  /// @return The number of glob groups.
+  Expected<unsigned> splitIntoGroups(ArrayRef<Pattern::Token> Toks,
+                                     SmallVectorImpl<TokenGroup>& Groups);
+
+  /// Creates a completely new `Pattern` object.
+  Expected<Pattern*> compilePatternImpl(StringRef Pat);
+  /// Creates a completely new `Pattern` object from tokens.
+  Expected<Pattern*> compilePatternImpl(
+      StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks);
+  /// Creates a completely new `Pattern` object from tokens.
+  Expected<Pattern*> compilePatternImpl(ArrayRef<Pattern::Token> Toks);
+
+  /// Creates a completely new `Pattern` without globs.
+  Expected<Pattern*> compilePattern0Globs(ArrayRef<TokenGroup> Groups);
+  /// Creates a completely new `Pattern` with a single glob.
+  Expected<Pattern*> compilePattern1Globs(ArrayRef<TokenGroup> Groups);
+  /// Creates a completely new `Pattern` with >1 globs.
+  /// Uses a different, more complex method of matching.
+  Expected<Pattern*> compilePatternNGlobs(ArrayRef<TokenGroup> Groups, unsigned N);
+
+  /// Creates a `Pattern` from a `TokenGroup`.
+  Pattern* makeDispatch(TokenGroup Group);
+  /// Creates a `SimplePattern` from a `TokenGroup`.
+  SimplePattern* makeSimple(TokenGroup Group);
+  /// Creates a `SingleSequencePattern` from a `TokenGroup`.
+  SingleSequencePattern* makeSingleSequence(TokenGroup Group);
+  /// Creates a `SinglePattern` from a `TokenGroup`.
+  SinglePattern* makeReplacement(TokenGroup Group);
+
+  template <class NodeT>
+  LLVM_ATTRIBUTE_ALWAYS_INLINE void addToDestroy(NodeT* Out) {
+    if constexpr (std::derived_from<NodeT, Pattern>) {
+      if (pattern_needs_destructor_called_v<NodeT>)
+        ToDestroy.insert(static_cast<Pattern*>(Out));
+    }
+  }
+
+public:
   /// Creates a new node of type `NodeT`.
   template <class NodeT, typename...Args> NodeT* make(Args&&...args) {
-    return new (BP) NodeT(std::forward<Args>(args)...);
+    NodeT* Out = new (BP) NodeT(std::forward<Args>(args)...);
+    this->addToDestroy(Out);
+    return Out;
+  }
+  /// Creates a new node of type `NodeT`.
+  template <class NodeT, typename...Args> NodeT* makeNew(Args&&...args) {
+    NodeT* Out = NodeT::New(BP, std::forward<Args>(args)...);
+    this->addToDestroy(Out);
+    return Out;
+  }
+  /// Creates a new `ReplacerStorage<NodeT>` and returns the held `NodeT`.
+  template <class NodeT> auto* makeR(auto Toks) {
+    auto* Rep = make<ReplacerStorage<NodeT>>(Toks);
+    Replacements.push_back(Rep);
+    return &Rep->ThePattern;
   }
 
   /// Saves string with BP.

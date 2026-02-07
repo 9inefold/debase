@@ -46,8 +46,8 @@ struct Pattern::Token {
     KGlob,      // `**`
     KThis,      // `{this.*}`
     KLateBind,  // `{file.*}`
-    KRegex,     // eg. `I*X+0?[...]`
     KSimpleFmt, // `I{file.stem}v{...}` => `"I%0v%1" + [file.stem, ...]`
+    KRegex,     // eg. `I*X+0?[...]`
     KRegexFmt,  // `I?{file.stem}+` => `"I?(%0)+" + [file.stem]`
   };
 
@@ -99,7 +99,18 @@ public:
     };
   }
 
+  /// Return the data held by the token.
   StringRef str() const { return StringRef(data, size); }
+  /// Check if data contains a simple literal.
+  bool isLiteral() const { return kind == KSimple || kind == KAnonymous; }
+  /// Check if simple replacement type.
+  bool isSimpleReplacement() const {
+    return kind == KThis || kind == KLateBind || kind == KSimpleFmt;
+  }
+  /// Check if replacement type.
+  bool isReplacement() const {
+    return kind == KRegexFmt || isSimpleReplacement();
+  }
 };
 
 /// Lexes `Token`s for a `Pattern` from `Pat`.
@@ -111,5 +122,8 @@ llvm::Error lexTokensForPattern(StringRef Pat, SmallVectorImpl<Pattern::Token>& 
 /// @param BP The allocator for the strings. Must live at least as long as the final patterns.
 llvm::Error lexTokensForPattern(StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks,
                                 llvm::BumpPtrAllocator& BP, FilePropertyCache* This = nullptr);
+
+raw_ostream& operator<<(raw_ostream& OS, Pattern::Token Tok);
+void printTokenGroup(raw_ostream& OS, ArrayRef<Pattern::Token> Toks);
 
 } // namespace debase_tool

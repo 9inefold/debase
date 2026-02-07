@@ -21,6 +21,7 @@
 #include "LLVMTargets.hpp"
 #include "NameClassifier.hpp"
 #include "SymbolFeatures.hpp"
+#include "SymbolMatcher.hpp"
 #include "Pattern.hpp"
 #include "PatternLex.hpp"
 #include "Triple.hpp"
@@ -631,41 +632,6 @@ bool DeBaser::debaseDestructor(Function* F) {
   return true;
 }
 
-static StringRef TokName(Pattern::Token::Kind K) {
-  using enum Pattern::Token::Kind;
-  switch (K) {
-  case KSimple:
-    return "Simple";
-  case KAnonymous:
-    return "Anonymous";
-  case KGlob:
-    return "Glob";
-  case KRegex:
-    return "Regex";
-  case KThis:
-    return "This";
-  case KLateBind:
-    return "LateBind";
-  case KSimpleFmt:
-    return "SimpleFmt";
-  case KRegexFmt:
-    return "RegexFmt";
-  default:
-    llvm_unreachable("invalid Token::Kind");
-  }
-}
-
-static raw_ostream& operator<<(raw_ostream& OS, Pattern::Token Tok) {
-  using enum Pattern::Token::Kind;
-  OS << "<" << TokName(Tok.kind) << ":'";
-  if (Tok.kind == KAnonymous)
-    return OS << "@'>";
-  else if (Tok.kind == KGlob)
-    return OS << "**'>";
-  else
-    return OS << Tok.str() << "'>";
-}
-
 static bool TestLexPattern(StringRef P, const bool ShouldPass,
                            llvm::BumpPtrAllocator& BP,
                            FilePropertyCache* Prop = nullptr,
@@ -694,22 +660,8 @@ static bool TestLexPattern(StringRef P, const bool ShouldPass,
   }
 
   outs().indent((Indent + 1) * 2);
-  if (!Toks.empty()) {
-    int SkipCount = 0;
-    ListSeparator LS(" :: ");
-    for (Pattern::Token Tok : Toks) {
-      if (SkipCount--) {
-        outs() << Tok << (SkipCount ? ", " : ")");
-        continue;
-      }
-      outs() << LS << Tok;
-      if ((SkipCount = Tok.trailing))
-        outs() << " (";
-    }
-    outs() << "\n\n";
-  } else {
-    outs() << "<empty>\n\n";
-  }
+  printTokenGroup(outs(), Toks);
+  outs() << "\n\n";
 
   return ShouldPass;
 }
@@ -870,6 +822,34 @@ int main(int Argc, char** Argv) {
     "llvmir pass that removes calls to bases in ctors/dtors.\n");
   
   RunLexTests(false);
+
+  auto SM = std::make_unique<SymbolMatcher>();
+  auto SetFilename = [&SM] (StringRef Filename) {
+    if (auto E = SM->setFilename(Filename)) {
+      errs() << toString(std::move(E)) << "\n\n";
+      std::exit(1);
+    }
+  };
+
+  auto POrErr = SM->compilePattern("x::/y+/::z::I?{file.stem}");
+  if (!POrErr) {
+    errs() << toString(POrErr.takeError()) << "\n\n";
+    return 1;
+  }
+  Pattern* P = *POrErr;
+
+  SetFilename("bindings/CCScheduler.cpp");
+  P->print(outs());
+  outs() << "\n\n";
+  assert(cast<MultiPattern>(P)->match({"x", "y", "z", "ICCScheduler"}));
+
+  SetFilename("bindings/CCLightning.cpp");
+  P->print(outs());
+  outs() << "\n\n";
+  assert(cast<MultiPattern>(P)->match({"x", "yyy", "z", "CCLightning"}));
+
+  llvm::BuryPointer(std::move(SM));
+  return 0;
   
   LLVMContext Context;
 

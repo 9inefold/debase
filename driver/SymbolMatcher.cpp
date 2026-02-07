@@ -22,36 +22,256 @@
 //===----------------------------------------------------------------------===//
 
 #include "SymbolMatcher.hpp"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "FilePropertyCache.hpp"
 #include "PatternLex.hpp"
+
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace debase_tool;
 using namespace llvm;
 
-static Error MakeError(StringRef S) {
-  return createStringError(llvm::inconvertibleErrorCode(), S);
-}
+using Token = Pattern::Token;
+
 static Error MakeError(const Twine& Msg) {
   return createStringError(llvm::inconvertibleErrorCode(), Msg);
 }
 
+LLVM_ATTRIBUTE_ALWAYS_INLINE
+ArrayRef<Pattern::Token> SymbolMatcher::TokenGroup::arr() const {
+  return {Tok, Tok + Count};
+}
+
+SymbolMatcher::~SymbolMatcher() {
+  for (Pattern* P : ToDestroy) {
+    if (LLVM_LIKELY(P != nullptr))
+      std::destroy_at(P);
+  }
+  for (Replacer* R : Replacements) {
+    if (LLVM_LIKELY(R != nullptr))
+      std::destroy_at(R);
+  }
+}
+
+Error SymbolMatcher::setFilename(StringRef Filename) {
+  CurrentFilename = intern(Filename);
+  FilePropertyCache FPC(*CurrentFilename);
+  for (Replacer* R : Replacements) {
+    if (Error E = R->replace(BP, FPC)) [[unlikely]] {
+      if (!Permissive)
+        return E;
+    }
+  }
+  return Error::success();
+}
+
 StringRef SymbolMatcher::intern(StringRef S) {
-  return SS.save(S);
+  if (S.empty())
+    return "";
+  char* Out = BP.Allocate<char>(S.size() + 1);
+  std::memcpy(Out, S.data(), S.size());
+  Out[S.size()] = '\0';
+  return {Out, S.size()};
 }
 
 bool SymbolMatcher::ownsThisData(const void* Ptr) {
   return BP.identifyObject(Ptr).has_value();
 }
 
+Expected<Pattern*> SymbolMatcher::compilePattern(
+    StringRef Pat, SmallVectorImpl<Pattern::Token>* ToksBuf) {
+  Pattern*& Out = PatternMappings[Pat];
+  if (Out != nullptr)
+    return Out;
+  Expected<Pattern*> CompiledOrErr = [=, this] {
+    if (ToksBuf)
+      return this->compilePatternImpl(Pat, *ToksBuf);
+    else
+      return this->compilePatternImpl(Pat);
+  }();
+  if (!CompiledOrErr)
+    return CompiledOrErr.takeError();
+  return (Out = *CompiledOrErr);
+}
+
+LLVM_ATTRIBUTE_NOINLINE
+Expected<Pattern*> SymbolMatcher::compilePatternImpl(StringRef Pat) {
+  SmallVector<Pattern::Token> Toks;
+  if (Error E = lexTokensForPattern(Pat, Toks, BP))
+    return E;
+  return compilePatternImpl(Toks);
+}
+
+Expected<Pattern*> SymbolMatcher::compilePatternImpl(
+    StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks) {
+  if (Error E = lexTokensForPattern(Pat, Toks, BP))
+    return E;
+  return compilePatternImpl(Toks);
+}
+
+Expected<unsigned> SymbolMatcher::splitIntoGroups(ArrayRef<Pattern::Token> Toks,
+                                                  SmallVectorImpl<TokenGroup>& Groups) {
+  unsigned Globs = 0;
+  size_t I = 0, E = Toks.size();
+  while (I < E) {
+    TokenGroup Group {
+      .Tok = &Toks[I],
+      .AllSimple = true
+    };
+    // Skip leading globs
+    if (Group.Tok->kind == Token::KGlob) {
+      ++Globs;
+      Group.Tok = &Toks[++I];
+      Group.LeadingGlob = true;
+      if (LLVM_UNLIKELY(Group.Tok->kind == Token::KGlob))
+        return MakeError("sequential globs not coalesced?");
+      else if (LLVM_UNLIKELY(I >= E))
+        return MakeError("glob token found at end of pattern?");
+    }
+    // Check for replacement groups
+    if (Group.Tok->trailing > 0) {
+      // Replacements are always their own group
+      Group.Count = Group.Tok->trailing + 1;
+      Group.AllSimple = false;
+      Group.Replacement = true;
+      I += Group.Count;
+      Groups.push_back(Group);
+      continue;
+    }
+    
+    // Search for terminating token
+    size_t N = 0, LastTheEnd = E - I;
+    for (; N < LastTheEnd; ++N, ++I) {
+      Token Curr = Group.Tok[N];
+      if (Curr.kind == Token::KGlob)
+        break;
+      else if (Curr.trailing > 0)
+        break;
+      if (Curr.isLiteral())
+        Group.AllSimple = false;
+    }
+    if (LLVM_UNLIKELY(N == 0))
+      return MakeError("found empty group?");
+
+    Group.Count = N;
+    Groups.push_back(Group);
+  }
+
+  if (LLVM_UNLIKELY(Groups.empty()))
+    return MakeError("found no groups?");
+  return Globs;
+}
+
+Expected<Pattern*> SymbolMatcher::compilePatternImpl(ArrayRef<Pattern::Token> Toks) {
+  SmallVector<TokenGroup> Groups;
+  Expected<unsigned> GlobsOrErr = splitIntoGroups(Toks, Groups);
+  if (!GlobsOrErr)
+    return GlobsOrErr.takeError();
+  const unsigned Globs = *GlobsOrErr;
+#if 0
+  ListSeparator LS(" :: ");
+  for (TokenGroup Group : Groups) {
+    outs() << LS << (Group.Replacement ? "*[ " : "[ ");
+    printTokenGroup(outs(), Group.arr());
+    outs() << " ]";
+  }
+  outs() << '\n';
+#endif
+  // Switch based on globs
+  if (Globs == 0)
+    return compilePattern0Globs(Groups);
+  else if (Globs == 1)
+    return compilePattern1Globs(Groups);
+  else /*Globs > 1*/
+    return compilePatternNGlobs(Groups, Globs);
+}
+
+SimplePattern* SymbolMatcher::makeSimple(TokenGroup Group) {
+  assert(Group.AllSimple);
+  SmallVector<StringRef> Literals;
+  Literals.reserve(Group.Count);
+  for (Pattern::Token Tok : Group.arr())
+    Literals.push_back(Tok.str());
+  return makeNew<SimplePattern>(Literals);
+}
+
+SingleSequencePattern* SymbolMatcher::makeSingleSequence(TokenGroup Group) {
+  SmallVector<SinglePattern*> Patterns;
+  Patterns.reserve(Group.Count);
+  for (Pattern::Token Tok : Group.arr()) {
+    switch (Tok.kind) {
+    case Token::KSimple:
+    case Token::KAnonymous:
+      Patterns.push_back(
+        make<SoloPattern>(Tok.str()));
+      break;
+    case Token::KLateBind:
+      Patterns.push_back(
+        makeR<ProxySoloPattern>(Tok));
+      break;
+    case Token::KRegex:
+      Patterns.push_back(
+        make<RegexPattern>(Tok.str()));
+      break;
+    default:
+      llvm_unreachable("invalid token kind");
+    }
+  }
+  return makeNew<SingleSequencePattern>(Patterns);
+}
+
+SinglePattern* SymbolMatcher::makeReplacement(TokenGroup Group) {
+  assert(Group.Replacement);
+  Token::Kind K = Group.Tok[0].kind;
+  if (K == Token::KSimpleFmt)
+    return makeR<SoloPattern>(Group.arr());
+  else if (K == Token::KRegexFmt)
+    return makeR<RegexPattern>(Group.arr());
+  llvm_unreachable("invalid replacement kind");
+}
+
+Pattern* SymbolMatcher::makeDispatch(TokenGroup Group) {
+  if (Group.AllSimple)
+    return makeSimple(Group);
+  else if (Group.Replacement)
+    return makeReplacement(Group);
+  else
+    return makeSingleSequence(Group);
+}
+
+Expected<Pattern*> SymbolMatcher::compilePattern0Globs(ArrayRef<TokenGroup> Groups) {
+  if (Groups.size() == 1)
+    return makeDispatch(Groups[0]);
+  SmallVector<Pattern*> Patterns;
+  for (TokenGroup Group : Groups)
+    Patterns.push_back(makeDispatch(Group));
+  return makeNew<AnySequencePattern>(Patterns);
+}
+
+Expected<Pattern*> SymbolMatcher::compilePattern1Globs(ArrayRef<TokenGroup> Groups) {
+  llvm_unreachable("compilePattern1Globs unimplemented!");
+}
+
+Expected<Pattern*> SymbolMatcher::compilePatternNGlobs(ArrayRef<TokenGroup> Groups,
+                                                       unsigned N) {
+  assert(Groups.size() > 1);
+  llvm_unreachable("compilePatternNGlobs unimplemented!");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // JSON Config
 
-namespace {
-class JSONLoaderHandler {
+using JSONLoaderHandler = SymbolMatcher::JSONLoaderHandler;
+
+class SymbolMatcher::JSONLoaderHandler {
   json::Value JSON;
   StringRef Filename;
+  FilePropertyCache FPC;
   SymbolMatcher* P = nullptr;
+  SmallVector<Pattern::Token> TokenBuf;
 
 public:
   JSONLoaderHandler(JSONLoaderHandler&&) = default;
@@ -61,7 +281,22 @@ public:
 private:
   /// Internal default constructor.
   JSONLoaderHandler(json::Value&& JSON, StringRef Filename, SymbolMatcher* thiz)
-   : JSON(std::move(JSON)), Filename(thiz->intern(Filename)), P(thiz) {
+   : JSON(std::move(JSON)), Filename(thiz->intern(Filename)),
+     FPC(this->Filename), P(thiz) {
+    assert(thiz != nullptr);
+  }
+
+  void addCtor(Pattern* Pat) {
+    assert(Pat != nullptr);
+    P->CtorPatterns.insert(Pat);
+  }
+  void addDtor(Pattern* Pat) {
+    assert(Pat != nullptr);
+    P->DtorPatterns.insert(Pat);
+  }
+  void addAll(Pattern* Pat) {
+    this->addCtor(Pat);
+    this->addDtor(Pat);
   }
 
 public:
@@ -69,13 +304,12 @@ public:
   Error loadFiles(json::Array& files);
   Error loadPatterns(json::Object& files);
   Error loadPatterns(json::Array& files);
-  Error loadPatterns(StringRef files);
+  Error loadPattern(StringRef files);
 
   Error report(const Twine& Msg) const {
     return MakeError(Twine("In ") + Filename + ": " + Msg);
   }
 };
-} // namespace `anonymous`
 
 Expected<JSONLoaderHandler> JSONLoaderHandler::New(StringRef Filename,
                                                    SymbolMatcher* thiz) {
@@ -107,7 +341,7 @@ Error JSONLoaderHandler::load() {
     else if (json::Array* patterns = root->getArray("patterns"))
       return this->loadPatterns(*patterns);
     else if (auto pattern = root->getString("patterns"))
-      return this->loadPatterns(*pattern);
+      return this->loadPattern(*pattern);
     else
       return report("'patterns' does not exist or is not an object/array/string");
   }
@@ -121,18 +355,34 @@ Error JSONLoaderHandler::loadFiles(json::Array& files) {
   return Error::success();
 }
 
-Error JSONLoaderHandler::loadPatterns(json::Object& files) {
-
+Error JSONLoaderHandler::loadPatterns(json::Object& patterns) {
+  //patterns
+  llvm_unreachable("loadPatterns unimplemented");
   return Error::success();
 }
 
-Error JSONLoaderHandler::loadPatterns(json::Array& files) {
-
+Error JSONLoaderHandler::loadPatterns(json::Array& patterns) {
+  for (auto& _pattern : patterns) {
+    auto pattern = _pattern.getAsString();
+    if (LLVM_UNLIKELY(!pattern)) {
+      if (P->Permissive)
+        continue;
+      return report("pattern is not a string");
+    }
+    // Now actually load the pattern.
+    if (Error E = loadPattern(*pattern)) {
+      if (!P->Permissive)
+        return E;
+    }
+  }
   return Error::success();
 }
 
-Error JSONLoaderHandler::loadPatterns(StringRef files) {
-
+Error JSONLoaderHandler::loadPattern(StringRef pattern) {
+  Expected<Pattern*> Pat = P->compilePattern(pattern, &TokenBuf);
+  if (LLVM_UNLIKELY(!Pat))
+    return Pat.takeError();
+  this->addAll(*Pat);
   return Error::success();
 }
 
