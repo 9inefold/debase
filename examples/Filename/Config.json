@@ -2,8 +2,5 @@
   "patterns": [
     "**::/{file.stem}*/"
   ],
-  "files": [
-    "./Simple.ll",
-    "./SimpleMSVC.ll"
-  ]
+  "files": "./Class.ll"
 }

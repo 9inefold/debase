@@ -5,6 +5,7 @@
     "all": "E"
   },
   "files": [
-    "./Class.ll"
+    "./Simple.ll",
+    "./SimpleMSVC.ll"
   ]
 }
