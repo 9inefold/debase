@@ -67,6 +67,7 @@ enum class PatternKind : unsigned {
   ButterflyGlob,  // eg. `x::**::Z`
   SingleSequence,
   AnySequence,
+  Forwarding,
   Solo,
   Regex,
 };
@@ -89,6 +90,8 @@ protected:
   Pattern(PatternKind K, unsigned Count) : Kind(K), Count(Count) {}
 
 public:
+  /// Dispatches to type specific match functions.
+  inline bool matchSymbol(ArrayRef<std::string> Syms) const;
   /// Returns the kind of `this`.
   PatternKind kind() const { return this->Kind; }
   /// Returns the pattern count.
@@ -130,7 +133,8 @@ public:
   /// Match against a (possibly partial) set of features.
   virtual bool match(ArrayRef<std::string> Names) const = 0;
   /// Match against a set of features.
-  bool match(this auto& self, const SymbolFeatures& F) {
+  LLVM_ATTRIBUTE_ALWAYS_INLINE bool match(this auto& self,
+                                          const SymbolFeatures& F) {
     return self.match(F.NestedNames);
   }
 private:
@@ -209,6 +213,17 @@ private:
   void anchor() override;
 };
 
+bool Pattern::matchSymbol(ArrayRef<std::string> Syms) const {
+  if (LLVM_UNLIKELY(Syms.empty()))
+    return false;
+  if (auto* SP = dyn_cast<SinglePattern>(this)) {
+    if (Syms.size() != 1)
+      return false;
+    return SP->match(StringRef(Syms[0]));
+  }
+  return cast<MultiPattern>(this)->match(Syms);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Multi
 
@@ -262,6 +277,23 @@ public:
   bool match(ArrayRef<std::string> Names) const override;
   void print(raw_ostream& OS) const override;
   unsigned requiredCount() const override final { return RealCount; }
+};
+
+/// Matches against multiple operation patterns.
+class ForwardingPattern final : public MultiPattern {
+  friend class SymbolMatcher;
+  SinglePattern* ThePattern;
+  ForwardingPattern(SinglePattern* P)
+   : MultiPattern(PatternKind::Forwarding, 1) {}
+public:
+  PATTERN_CLASSOF(PatternKind::Forwarding)
+  bool match(ArrayRef<std::string> Names) const override {
+    if (LLVM_UNLIKELY(Names.size() != 1))
+      return false;
+    return ThePattern->match(StringRef(Names[0]));
+  }
+  void print(raw_ostream& OS) const override;
+  unsigned requiredCount() const override final { return 1; }
 };
 
 /// Base for globbing patterns. Globs from the left hand side.

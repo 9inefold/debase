@@ -304,6 +304,9 @@ void AnySequencePattern::print(raw_ostream& OS) const {
     P->print(OS);
   }
 }
+void ForwardingPattern::print(raw_ostream& OS) const {
+  ThePattern->print(OS);
+}
 void SoloPattern::print(raw_ostream& OS) const {
   OS << this->P;
 }

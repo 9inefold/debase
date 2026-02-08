@@ -63,6 +63,11 @@ Error SymbolMatcher::setFilename(StringRef Filename) {
     if (Error E = R->replace(BP, FPC)) [[unlikely]] {
       if (!Permissive)
         return E;
+#ifndef NDEBUG
+      //else
+      //  outs() << "Unable to set filename for "
+      //         << static_cast<void*>(R) << '\n';
+#endif
     }
   }
   return Error::success();
@@ -150,7 +155,7 @@ Expected<unsigned> SymbolMatcher::splitIntoGroups(ArrayRef<Pattern::Token> Toks,
         break;
       else if (Curr.trailing > 0)
         break;
-      if (Curr.isLiteral())
+      if (!Curr.isLiteral())
         Group.AllSimple = false;
     }
     if (LLVM_UNLIKELY(N == 0))
@@ -242,7 +247,7 @@ Pattern* SymbolMatcher::makeDispatch(TokenGroup Group) {
     return makeSingleSequence(Group);
 }
 
-Expected<Pattern*> SymbolMatcher::compilePattern0Globs(ArrayRef<TokenGroup> Groups) {
+Pattern* SymbolMatcher::compilePattern0Globs(ArrayRef<TokenGroup> Groups) {
   if (Groups.size() == 1)
     return makeDispatch(Groups[0]);
   SmallVector<Pattern*> Patterns;
@@ -252,13 +257,23 @@ Expected<Pattern*> SymbolMatcher::compilePattern0Globs(ArrayRef<TokenGroup> Grou
 }
 
 Expected<Pattern*> SymbolMatcher::compilePattern1Globs(ArrayRef<TokenGroup> Groups) {
-  llvm_unreachable("compilePattern1Globs unimplemented!");
+  if (Groups[0].LeadingGlob) {
+    return make<LeadingGlobPattern>(
+             wrap(compilePattern0Globs(Groups)));
+  }
+  // Grab all the groups up to the glob
+  auto Leading = Groups.take_until([](TokenGroup G){ return G.LeadingGlob; });
+  auto Trailing = Groups.drop_front(Leading.size());
+  return make<ButterflyGlobPattern>(
+    wrap(compilePattern0Globs(Leading)),
+    wrap(compilePattern0Globs(Trailing))
+  );
 }
 
 Expected<Pattern*> SymbolMatcher::compilePatternNGlobs(ArrayRef<TokenGroup> Groups,
                                                        unsigned N) {
   assert(Groups.size() > 1);
-  llvm_unreachable("compilePatternNGlobs unimplemented!");
+  return MakeError("compilePatternNGlobs unimplemented!");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

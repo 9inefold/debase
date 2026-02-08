@@ -104,7 +104,7 @@ private:
   Expected<Pattern*> compilePatternImpl(ArrayRef<Pattern::Token> Toks);
 
   /// Creates a completely new `Pattern` without globs.
-  Expected<Pattern*> compilePattern0Globs(ArrayRef<TokenGroup> Groups);
+  Pattern* compilePattern0Globs(ArrayRef<TokenGroup> Groups);
   /// Creates a completely new `Pattern` with a single glob.
   Expected<Pattern*> compilePattern1Globs(ArrayRef<TokenGroup> Groups);
   /// Creates a completely new `Pattern` with >1 globs.
@@ -148,6 +148,18 @@ public:
     return &Rep->ThePattern;
   }
 
+private:
+  template <class NodeT>
+  LLVM_ATTRIBUTE_ALWAYS_INLINE MultiPattern* wrap(NodeT* Node) {
+    constexpr bool IsSingle = std::derived_from<NodeT, SinglePattern>;
+    if (IsSingle || isa<SinglePattern>(Node)) {
+      return make<ForwardingPattern>(
+               cast<SinglePattern>(Node));
+    }
+    return cast<MultiPattern>(Node);
+  }
+
+public:
   /// Saves string with BP.
   StringRef intern(StringRef S);
   /// Checks data was allocated by this matcher.

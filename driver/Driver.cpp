@@ -824,6 +824,14 @@ int main(int Argc, char** Argv) {
   RunLexTests(false);
 
   auto SM = std::make_unique<SymbolMatcher>();
+  auto LoadPattern = [&SM] (StringRef pattern) -> Pattern* {
+    auto POrErr = SM->compilePattern(pattern);
+    if (!POrErr) {
+      errs() << toString(POrErr.takeError()) << "\n\n";
+      std::exit(1);
+    }
+    return *POrErr;
+  };
   auto SetFilename = [&SM] (StringRef Filename) {
     if (auto E = SM->setFilename(Filename)) {
       errs() << toString(std::move(E)) << "\n\n";
@@ -831,22 +839,31 @@ int main(int Argc, char** Argv) {
     }
   };
 
-  auto POrErr = SM->compilePattern("x::/y+/::z::I?{file.stem}");
-  if (!POrErr) {
-    errs() << toString(POrErr.takeError()) << "\n\n";
-    return 1;
-  }
-  Pattern* P = *POrErr;
+  auto PrintPatterns = [] (ArrayRef<Pattern*> Patterns) {
+    for (Pattern* P : Patterns) {
+      P->print(outs());
+      outs() << '\n';
+    }
+    outs() << '\n';
+  };
+
+  Pattern* P[] = {
+    LoadPattern("x::/y+/::z::I?{file.stem}"),
+    LoadPattern("**::{file.stem}"),
+    LoadPattern("[[:lower:]]+::**::{file.stem}")
+  };
 
   SetFilename("bindings/CCScheduler.cpp");
-  P->print(outs());
-  outs() << "\n\n";
-  assert(cast<MultiPattern>(P)->match({"x", "y", "z", "ICCScheduler"}));
+  PrintPatterns(P);
+  assert(P[0]->matchSymbol({"x", "y", "z", "ICCScheduler"}));
+  assert(P[1]->matchSymbol({"cocos2d", "CCScheduler"}));
+  assert(P[2]->matchSymbol({"x", "y", "z", "CCScheduler"}));
 
   SetFilename("bindings/CCLightning.cpp");
-  P->print(outs());
-  outs() << "\n\n";
-  assert(cast<MultiPattern>(P)->match({"x", "yyy", "z", "CCLightning"}));
+  PrintPatterns(P);
+  assert(P[0]->matchSymbol({"x", "yyy", "z", "CCLightning"}));
+  assert(P[1]->matchSymbol({"cocos2d", "CCLightning"}));
+  assert(P[2]->matchSymbol({"cocos2d", "CCLightning"}));
 
   llvm::BuryPointer(std::move(SM));
   return 0;
