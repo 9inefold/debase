@@ -23,8 +23,10 @@
 
 #include "SymbolMatcher.hpp"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
 #include "FilePropertyCache.hpp"
 #include "PatternLex.hpp"
 
@@ -286,18 +288,21 @@ class SymbolMatcher::JSONLoaderHandler {
   StringRef Filename;
   FilePropertyCache FPC;
   SymbolMatcher* P = nullptr;
+  SmallVectorImpl<std::string>* OutFiles = nullptr;
   SmallVector<Pattern::Token> TokenBuf;
 
 public:
   JSONLoaderHandler(JSONLoaderHandler&&) = default;
   /// Creates a new `JSONLoaderHandler` from `Filename`, otherwise returns error.
   static Expected<JSONLoaderHandler> New(StringRef Filename,
-                                         SymbolMatcher* thiz);
+                                         SymbolMatcher* thiz,
+                                         SmallVectorImpl<std::string>* OutFiles);
 private:
   /// Internal default constructor.
-  JSONLoaderHandler(json::Value&& JSON, StringRef Filename, SymbolMatcher* thiz)
+  JSONLoaderHandler(json::Value&& JSON, StringRef Filename,
+                    SymbolMatcher* thiz, SmallVectorImpl<std::string>* OutFiles)
    : JSON(std::move(JSON)), Filename(thiz->intern(Filename)),
-     FPC(this->Filename), P(thiz) {
+     FPC(this->Filename), P(thiz), OutFiles(OutFiles) {
     assert(thiz != nullptr);
   }
 
@@ -317,9 +322,12 @@ private:
 public:
   Error load();
   Error loadFiles(json::Array& files);
-  Error loadPatterns(json::Object& files);
-  Error loadPatterns(json::Array& files);
-  Error loadPattern(StringRef files);
+  Error loadPatterns(json::Object& patterns);
+  Error loadPatterns(json::Array& patterns);
+  Error loadPattern(StringRef pattern);
+
+  Error loadSubpatterns(json::Object& patterns, StringRef name,
+                        SmallVectorImpl<Pattern*>& Out);
 
   Error report(const Twine& Msg) const {
     return MakeError(Twine("In ") + Filename + ": " + Msg);
@@ -327,7 +335,9 @@ public:
 };
 
 Expected<JSONLoaderHandler> JSONLoaderHandler::New(StringRef Filename,
-                                                   SymbolMatcher* thiz) {
+                                                   SymbolMatcher* thiz,
+                                                   SmallVectorImpl<std::string>* OutFiles) {
+  outs() << Filename << '\n';
   ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
       MemoryBuffer::getFile(Filename);
   if (std::error_code EC = FileOrErr.getError())
@@ -338,17 +348,20 @@ Expected<JSONLoaderHandler> JSONLoaderHandler::New(StringRef Filename,
   if (!JSON)
     return JSON.takeError();
   // Valid!
-  return JSONLoaderHandler(std::move(*JSON), Filename, thiz);
+  return JSONLoaderHandler(std::move(*JSON), Filename, thiz, OutFiles);
 }
 
 Error JSONLoaderHandler::load() {
   if (json::Object* root = JSON.getAsObject()) {
-    // "files": [...]
-    if (json::Array* files = root->getArray("files")) {
-      if (Error E = this->loadFiles(*files))
-        return E;
-    } else
-      return report("'files' does not exist or is not an array");
+    // Check if we even care
+    if (this->OutFiles) {
+      // "files": [...]
+      if (json::Array* files = root->getArray("files")) {
+        if (Error E = this->loadFiles(*files))
+          return E;
+      } else
+        return report("'files' does not exist or is not an array");
+    }
 
     // "patterns": { ... } or [...] or "..."
     if (json::Object* patterns = root->getObject("patterns"))
@@ -364,15 +377,78 @@ Error JSONLoaderHandler::load() {
 }
 
 Error JSONLoaderHandler::loadFiles(json::Array& files) {
-  for (json::Value& File : files) {
+  SmallString<128> Buf;
+  StringRef reldir = sys::path::parent_path(Filename);
+  assert(this->OutFiles != nullptr);
+  for (json::Value& _file : files) {
+    auto file = _file.getAsString();
+    if (LLVM_UNLIKELY(!file)) {
+      if (P->Permissive)
+        continue;
+      return report("filename is not a string");
+    }
+    // Resolve the file
+    // TODO: Make this fancier
+    Buf = *file;
+    sys::fs::make_absolute(reldir, Buf);
+    // Make sure it's a real file!
+    bool IsFile = true;
+    if (auto EC = sys::fs::is_regular_file(Buf.str(), IsFile))
+      return errorCodeToError(EC);
+    if (IsFile)
+      OutFiles->emplace_back(static_cast<std::string>(Buf));
+  }
+  return Error::success();
+}
 
+Error JSONLoaderHandler::loadSubpatterns(json::Object& patterns, StringRef name,
+                                         SmallVectorImpl<Pattern*>& Out) {
+  if (json::Value* field = patterns.get(name)) {
+    if (json::Array* patterns = field->getAsArray()) {
+      for (json::Value& _pattern : *patterns) {
+        auto pattern = _pattern.getAsString();
+        if (LLVM_UNLIKELY(!pattern)) {
+          if (P->Permissive)
+            continue;
+          return report("pattern is not a string");
+        }
+        Expected<Pattern*> Pat = P->compilePattern(*pattern, &TokenBuf);
+        if (LLVM_UNLIKELY(!Pat))
+          return Pat.takeError();
+        Out.push_back(*Pat);
+      }
+    } else if (auto pattern = field->getAsString()) {
+      Expected<Pattern*> Pat = P->compilePattern(*pattern, &TokenBuf);
+      if (LLVM_UNLIKELY(!Pat))
+        return Pat.takeError();
+      Out.push_back(*Pat);
+    } else if (!P->Permissive)
+      return report("field \"" + Twine(name) + "\" is not an array or string");
   }
   return Error::success();
 }
 
 Error JSONLoaderHandler::loadPatterns(json::Object& patterns) {
-  //patterns
-  llvm_unreachable("loadPatterns unimplemented");
+  SmallVector<Pattern*> Ctors;
+  SmallVector<Pattern*> Dtors;
+  SmallVector<Pattern*> All;
+  // Load everything into their respective arrays
+  if (Error E = loadSubpatterns(patterns, "ctor", Ctors))
+    return E;
+  if (Error E = loadSubpatterns(patterns, "dtor", Ctors))
+    return E;
+  if (Error E = loadSubpatterns(patterns, "all", All))
+    return E;
+  // Ensure we actually have values
+  if (Ctors.empty() && Dtors.empty() && All.empty())
+    return report("no patterns found in config (ctor/dtor/all)");
+  // Add ctor patterns
+  P->CtorPatterns.insert(Ctors.begin(), Ctors.end());
+  P->CtorPatterns.insert(All.begin(), All.end());
+  // Add dtor patterns
+  P->DtorPatterns.insert(Dtors.begin(), Dtors.end());
+  P->DtorPatterns.insert(All.begin(), All.end());
+  // Lets gooo
   return Error::success();
 }
 
@@ -401,9 +477,14 @@ Error JSONLoaderHandler::loadPattern(StringRef pattern) {
   return Error::success();
 }
 
-Error SymbolMatcher::loadSymbolsFromJSONFile(StringRef Filename) {
+Error SymbolMatcher::loadSymbolsFromJSONFile(
+    StringRef ConfigFile, SmallVectorImpl<std::string>* OutFiles) {
+  SmallString<80> ConfigFileReal = ConfigFile;
+  //sys::fs::make_absolute(ConfigFileReal);
+  if (auto EC = sys::fs::make_absolute(ConfigFileReal))
+    return errorCodeToError(EC);
   Expected<JSONLoaderHandler> JSON =
-      JSONLoaderHandler::New(Filename, this);
+      JSONLoaderHandler::New(ConfigFileReal.str(), this, OutFiles);
   if (!JSON)
     return JSON.takeError();
   return JSON->load();

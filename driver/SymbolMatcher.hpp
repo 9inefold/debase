@@ -54,6 +54,7 @@ class SymbolMatcher {
   llvm::SmallPtrSet<Pattern*, 4> ToDestroy;
   /// Contains replacements
   SmallVector<Replacer*, 4> Replacements;
+
   /// Filename of the current module.
   std::optional<StringRef> CurrentFilename;
 
@@ -69,7 +70,8 @@ public:
   ~SymbolMatcher();
 
   /// Loads symbol patterns and filenames from a JSON config file.
-  llvm::Error loadSymbolsFromJSONFile(StringRef Filename);
+  llvm::Error loadSymbolsFromJSONFile(StringRef ConfigFile,
+                                      SmallVectorImpl<std::string>* OutFiles = nullptr);
 
   /// TODO: Remove
   llvm::Error setFilename(StringRef Filename);
