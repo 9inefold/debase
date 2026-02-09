@@ -108,9 +108,12 @@ bool SymbolMatcher::ownsThisData(const void* Ptr) {
 
 Expected<Pattern*> SymbolMatcher::compilePattern(
     StringRef Pat, SmallVectorImpl<Pattern::Token>* ToksBuf) {
-  Pattern*& Out = PatternMappings[Pat];
-  if (Out != nullptr)
-    return Out;
+  auto [It, DidEmplace] = PatternMappings.try_emplace(Pat, nullptr);
+  //Pattern*& Out = PatternMappings[Pat];
+  if (It->second != nullptr)
+    return It->second;
+  // Use our newly generated value
+  Pat = It->first();
   Expected<Pattern*> CompiledOrErr = [=, this] {
     if (ToksBuf)
       return this->compilePatternImpl(Pat, *ToksBuf);
@@ -119,7 +122,7 @@ Expected<Pattern*> SymbolMatcher::compilePattern(
   }();
   if (!CompiledOrErr)
     return CompiledOrErr.takeError();
-  return (Out = *CompiledOrErr);
+  return (It->second = *CompiledOrErr);
 }
 
 LLVM_ATTRIBUTE_NOINLINE
@@ -295,6 +298,25 @@ Expected<Pattern*> SymbolMatcher::compilePatternNGlobs(ArrayRef<TokenGroup> Grou
   assert(Groups.size() > 1);
   return MakeError("compilePatternNGlobs unimplemented!");
 }
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD void SymbolMatcher::dump() const {
+  raw_ostream& OS = dbgs();
+  OS << "SymbolMatcher {\n";
+  OS << "  Filename: " << CurrentFilename << '\n';
+  OS << "  Permissive: " << Permissive << '\n';
+  OS << "  Patterns: [\n";
+  for (const StringMapEntry<Pattern*>& KV : PatternMappings) {
+    OS << "    \"" << KV.first() << "\": ";
+    KV.second->print(OS);
+    // Print info
+    OS << "\n      Ctor: " << CtorPatterns.contains(KV.second);
+    OS << "\n      Dtor: " << DtorPatterns.contains(KV.second) << '\n';
+  }
+  OS << "  ]\n}\n";
+  OS << "}\n";
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // JSON Config
@@ -480,7 +502,7 @@ Error JSONLoaderHandler::loadPatterns(json::Object& patterns) {
   // Load everything into their respective arrays
   if (Error E = loadSubpatterns(patterns, "ctor", Ctors))
     return E;
-  if (Error E = loadSubpatterns(patterns, "dtor", Ctors))
+  if (Error E = loadSubpatterns(patterns, "dtor", Dtors))
     return E;
   if (Error E = loadSubpatterns(patterns, "all", All))
     return E;

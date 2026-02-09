@@ -173,6 +173,10 @@ public:
   bool ownsThisData(const void* Ptr);
   /// Checks string was allocated by this matcher.
   bool ownsThisData(StringRef S) { return ownsThisData(S.data()); }
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  LLVM_DUMP_METHOD void dump() const;
+#endif
 };
 
 } // namespace debase_tool
