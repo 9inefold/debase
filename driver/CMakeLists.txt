@@ -16,7 +16,9 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
   target_compile_options(${PROJECT_NAME} PUBLIC
     -Wall -Wno-unused-private-field -Wno-unused-function -Wno-unused-variable
+    #-fsanitize=address
   )
+  #target_link_options(${PROJECT_NAME} PUBLIC -fsanitize=address)
 endif()
 #target_compile_options(${PROJECT_NAME} PUBLIC
 #  -fno-exceptions -funwind-tables -stdlib=libc++
