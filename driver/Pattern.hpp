@@ -282,9 +282,9 @@ public:
 /// Matches against multiple operation patterns.
 class ForwardingPattern final : public MultiPattern {
   friend class SymbolMatcher;
-  SinglePattern* ThePattern;
+  SinglePattern* ThePattern = nullptr;
   ForwardingPattern(SinglePattern* P)
-   : MultiPattern(PatternKind::Forwarding, 1) {}
+   : MultiPattern(PatternKind::Forwarding, 1), ThePattern(P) {}
 public:
   PATTERN_CLASSOF(PatternKind::Forwarding)
   bool match(ArrayRef<std::string> Names) const override {
