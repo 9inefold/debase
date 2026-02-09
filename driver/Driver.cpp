@@ -403,12 +403,6 @@ class DeBaser {
   Function* BI__debase_mark_end = nullptr;
   Function* BI__debase_continuation = nullptr;
 
-  /// The number of simple references encountered.
-  unsigned EncounteredSimple = 0;
-  /// The number of complex references encountered.
-  /// Unlike `EncounteredSimple`, this can vary.
-  unsigned EncounteredComplex = 0;
-
   bool LoadedModule : 1 = false;
   bool SetUnlinks : 1 = false;
   bool LastCheck : 1 = true;
@@ -424,7 +418,7 @@ public:
     Factory(SymbolMatcher& SM, const char* Argv0, LLVMContext& Context) :
      SM(SM), Context(Context), Argv0(Argv0) {}
     
-    std::optional<DeBaser> New(StringRef Filename) {
+    std::optional<DeBaser> New(StringRef Filename, LLVMContext& Ctx) {
       std::optional<DeBaser> DB;
       DB.emplace(Filename, SM, Argv0, Context);
       if (!DB->LoadedModule) {
@@ -432,6 +426,9 @@ public:
         return std::nullopt;
       }
       return DB;
+    }
+    std::optional<DeBaser> New(StringRef Filename) {
+      return New(Filename, this->Context);
     }
   };
 
@@ -447,7 +444,7 @@ public:
     if (M) {
       assert(this->LoadedModule
           && "Forgot to set DeBaser::LoadedModule!");
-      DbgBuryPointer(std::move(M));
+      //DbgBuryPointer(std::move(M));
     }
   }
 
@@ -641,6 +638,110 @@ bool DeBaser::debaseDestructor(Function* F) {
   return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+DeBaser::DeBaser(StringRef Filename, SymbolMatcher& SM,
+                 std::string Argv0, LLVMContext& Context)
+    : SM(SM), Argv0(Argv0) {
+  loadModule(Filename, Context);
+}
+
+bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
+  if (LLVM_UNLIKELY(LoadedModule)) {
+    if (Filename == M->getName())
+      return true;
+    error() << "Module for '" << Filename
+      << "' has already been loaded as '" << M->getName() << "'!\n";
+    return false;
+  }
+
+  volatile int III = Filename.front() + Filename.back();
+  //Context.pImpl
+  //errs() << "File: " << Filename << '\n';
+  M = parseIRFile(Filename, Err, Context);
+  if (!M) {
+    Err.print(Argv0.data(), error());
+    return false;
+  }
+
+  assert(Filename == M->getName());
+  if (Error E = SM.setFilename(Filename)) [[unlikely]] {
+    error() << "Unable to parse file '" << Filename << "'.\n";
+    return false;
+  }
+
+  this->LoadedModule = true;
+  return true;
+}
+
+DeBaser::PrevFunctionInfo DeBaser::GetInfoAndUpdate(Function* F) {
+  using enum Attribute::AttrKind;
+  PrevFunctionInfo Info {
+    .HadNoinline      = F->hasFnAttribute(NoInline),
+    .HadAlwaysinline  = F->hasFnAttribute(AlwaysInline)
+  };
+  if (!Info.HadNoinline)
+    F->addFnAttr(NoInline);
+  if (Info.HadAlwaysinline)
+    F->removeFnAttr(AlwaysInline);
+  // SetInfoWithAttrKind(HadUsed, Used?);
+  return Info;
+}
+
+void DeBaser::ResetInfo(Function* F, const PrevFunctionInfo& Info) {
+  using enum Attribute::AttrKind;
+  if (!Info.HadNoinline)
+    F->removeFnAttr(NoInline);
+  if (Info.HadAlwaysinline)
+    F->addFnAttr(AlwaysInline);
+}
+
+bool DeBaser::loadAndUpdateRefsFromModule() {
+  if (!LoadedModule)
+    return false;
+  if (!this->SymClassifier) {
+    error() << "SymClassifier was not initialized!\n";
+    return false;
+  }
+
+  SymbolFeatures FFeats {};
+  for (Function& F : M->getFunctionList()) {
+    std::string Name = F.getName().str();
+    SymClassifier->classify(Name, &FFeats);
+    if (!SM.match(FFeats))
+      continue;
+    // TODO: Switch when complex added.
+    //++EncounteredSimple;
+
+    auto [It, DidEmplace] = LocatedRefs.try_emplace(&F);
+    if (LLVM_UNLIKELY(!DidEmplace)) {
+      if (!Permissive) {
+        error() << "Duplicate definition of "
+          << F.getName() << "??\n";
+        return false;
+      }
+      continue;
+    }
+
+    It->second = GetInfoAndUpdate(&F);
+    if (Verbose) {
+      WithColor::note(outs())
+        << "Found " << F.getName() << '\n';
+    }
+  }
+
+  //if (Strict && EncounteredSimple != Refs.simpleCount()) {
+  //  error()
+  //    << "In '-strict' all simple definitions are required to be encountered. Only "
+  //    << EncounteredSimple << " were encountered, when "
+  //    << Refs.simpleCount() << " were required.\n";
+  //  return false;
+  //}
+
+  this->SetUnlinks = true;
+  return true;
+}
+
 int main(int Argc, char** Argv) {
   InitLLVM X(Argc, Argv);
   LLVMInitializeEverything();
@@ -718,6 +819,10 @@ int main(int Argc, char** Argv) {
       << "No valid input files were provided!";
     return 1;
   }
+
+#if !defined(NDEBUG)
+  SM->dump();
+#endif
 
   SMDiagnostic Err;
   auto WriteSMErrToString = [&Err, Argv](bool UseColors = true) {
@@ -895,11 +1000,13 @@ int main(int Argc, char** Argv) {
   MSVCClassifier MClass;
 
   for (StringRef Filename : ValidFilenames) {
+    LLVMContext LocalCtx;
     //errs() << "File: " << Filename << '\n';
     if (Filename.empty())
       continue;
 
-    std::optional<DeBaser> DB = DBFactory.New(Filename);
+    //std::optional<DeBaser> DB = DBFactory.New(Filename);
+    std::optional<DeBaser> DB = DBFactory.New(Filename, LocalCtx);
     if (!DB.has_value()) {
       WithColor::warning(errs())
         << "Failed to generate module for '"
@@ -932,107 +1039,6 @@ int main(int Argc, char** Argv) {
     DB->resetFunctionAttrs();
     // Run aggressive optimizer
   }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-DeBaser::DeBaser(StringRef Filename, SymbolMatcher& SM,
-                 std::string Argv0, LLVMContext& Context)
-    : SM(SM), Argv0(Argv0) {
-  loadModule(Filename, Context);
-}
-
-bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
-  if (LLVM_UNLIKELY(LoadedModule)) {
-    if (Filename == M->getName())
-      return true;
-    error() << "Module for '" << Filename
-      << "' has already been loaded as '" << M->getName() << "'!\n";
-    return false;
-  }
-
-  M = parseIRFile(Filename, Err, Context);
-  if (!M) {
-    Err.print(Argv0.data(), error());
-    return false;
-  }
-
-  assert(Filename == M->getName());
-  if (Error E = SM.setFilename(Filename)) [[unlikely]] {
-    error() << "Unable to parse file '" << Filename << "'.\n";
-    return false;
-  }
-
-  this->LoadedModule = true;
-  return true;
-}
-
-DeBaser::PrevFunctionInfo DeBaser::GetInfoAndUpdate(Function* F) {
-  using enum Attribute::AttrKind;
-  PrevFunctionInfo Info {
-    .HadNoinline      = F->hasFnAttribute(NoInline),
-    .HadAlwaysinline  = F->hasFnAttribute(AlwaysInline)
-  };
-  if (!Info.HadNoinline)
-    F->addFnAttr(NoInline);
-  if (Info.HadAlwaysinline)
-    F->removeFnAttr(AlwaysInline);
-  // SetInfoWithAttrKind(HadUsed, Used?);
-  return Info;
-}
-
-void DeBaser::ResetInfo(Function* F, const PrevFunctionInfo& Info) {
-  using enum Attribute::AttrKind;
-  if (!Info.HadNoinline)
-    F->removeFnAttr(NoInline);
-  if (Info.HadAlwaysinline)
-    F->addFnAttr(AlwaysInline);
-}
-
-bool DeBaser::loadAndUpdateRefsFromModule() {
-  if (!LoadedModule)
-    return false;
-  if (!this->SymClassifier) {
-    error() << "SymClassifier was not initialized!\n";
-    return false;
-  }
-
-  SymbolFeatures FFeats {};
-  for (Function& F : M->getFunctionList()) {
-    std::string Name = F.getName().str();
-    SymClassifier->classify(Name, &FFeats);
-    if (!SM.match(FFeats))
-      continue;
-    // TODO: Switch when complex added.
-    ++EncounteredSimple;
-
-    auto [It, DidEmplace] = LocatedRefs.try_emplace(&F);
-    if (LLVM_UNLIKELY(!DidEmplace)) {
-      if (!Permissive) {
-        error() << "Duplicate definition of "
-          << F.getName() << "??\n";
-        return false;
-      }
-      continue;
-    }
-
-    It->second = GetInfoAndUpdate(&F);
-    if (Verbose) {
-      WithColor::note(outs())
-        << "Found " << F.getName() << '\n';
-    }
-  }
-
-  //if (Strict && EncounteredSimple != Refs.simpleCount()) {
-  //  error()
-  //    << "In '-strict' all simple definitions are required to be encountered. Only "
-  //    << EncounteredSimple << " were encountered, when "
-  //    << Refs.simpleCount() << " were required.\n";
-  //  return false;
-  //}
-
-  this->SetUnlinks = true;
-  return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
