@@ -239,15 +239,24 @@ static decltype(auto) exitOrReturnDefault(DefaultT&& Default) {
   return std::forward<DefaultT>(Default);
 }
 
-static bool FixupFilename(std::string& InFilename) {
-  SmallString<128> Filename{StringRef(InFilename)};
+static bool FixupFilename(SmallVectorImpl<char>& Filename) {
   if (auto EC = sys::fs::make_absolute(Filename)) {
     exitOrLogWithError(EC.message());
-    InFilename.clear();
+    Filename.clear();
     return false;
   }
   if (!sys::fs::exists(Filename)) {
-    exitOrLogWithError(Twine("'") + Filename.str() + "' does not exist!");
+    StringRef FilenameS(Filename.data(), Filename.size());
+    exitOrLogWithError(Twine("'") + FilenameS + "' does not exist!");
+    Filename.clear();
+    return false;
+  }
+  return true;
+}
+
+static bool FixupFilename(std::string& InFilename) {
+  SmallString<128> Filename{StringRef(InFilename)};
+  if (!FixupFilename(Filename)) {
     InFilename.clear();
     return false;
   }
@@ -369,9 +378,9 @@ class DeBaser {
   /// The diagnostic engine for the current module.
   SMDiagnostic Err;
   /// The matcher for the current module group.
-  UnlinkRefs& Refs;
+  SymbolMatcher& SM;
   /// The commandline (for diagnostics).
-  char* const* Argv = nullptr;
+  StringRef Argv0;
 
   /// Stores all the attribute data from our matched functions so they can be
   /// restored later. This allows for passes which would otherwise be harder
@@ -408,16 +417,16 @@ class DeBaser {
 public:
   /// A utility for creating new debaser objects.
   class Factory {
-    UnlinkRefs& Refs;
+    SymbolMatcher& SM;
     LLVMContext& Context;
-    char* const* Argv = nullptr;
+    std::string Argv0;
   public:
-    Factory(UnlinkRefs& Refs, char** Argv, LLVMContext& Context) :
-     Refs(Refs), Context(Context), Argv(Argv) {}
+    Factory(SymbolMatcher& SM, const char* Argv0, LLVMContext& Context) :
+     SM(SM), Context(Context), Argv0(Argv0) {}
     
     std::optional<DeBaser> New(StringRef Filename) {
       std::optional<DeBaser> DB;
-      DB.emplace(Filename, Refs, Argv, Context);
+      DB.emplace(Filename, SM, Argv0, Context);
       if (!DB->LoadedModule) {
         // Unfortunately, we have failed... Return nothing.
         return std::nullopt;
@@ -426,8 +435,8 @@ public:
     }
   };
 
-  DeBaser(StringRef Filename, UnlinkRefs& Refs,
-          char* const* Argv, LLVMContext& Context);
+  DeBaser(StringRef Filename, SymbolMatcher& SM,
+          std::string Argv0, LLVMContext& Context);
 
   DeBaser(DeBaser&&) = default;
   //DeBaser& operator=(DeBaser&&) = default;
@@ -475,7 +484,7 @@ public:
   }
 
   raw_ostream& error() const {
-    return WithColor::error(errs(), Argv[0]);
+    return WithColor::error(errs(), "");
   }
 
 private:
@@ -661,39 +670,10 @@ int main(int Argc, char** Argv) {
   }
 
   if (InputFilenames.empty() && ConfigFile.empty()) {
-    WithColor::error(errs(), Argv[0])
+    WithColor::error(errs())
       << "No input files provided!";
     return 1;
   }
-
-  SmallVector<std::string> ConfigFilenames;
-#if 0
-  std::optional<matjson::Value> ConfigJSON;
-  if (!ConfigFile.empty()) {
-    ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
-        MemoryBuffer::getFile(ConfigFile);
-    if (std::error_code EC = FileOrErr.getError()) {
-      WithColor::error(errs(), Argv[0])
-        << "Could not open input file: " << EC.message();
-      return 1;
-    }
-
-    StringRef ConfigSrc = (*FileOrErr)->getBuffer();
-    ConfigJSON.emplace(matjson::parse(ConfigSrc).unwrap());
-    //auto ConfigSrc = ConfigJSON->get("files").unwrap().asArray().unwrap();
-  }
-#else
-  if (!ConfigFile.empty()) {
-    const auto& Conf = ConfigFile.getValue();
-    Error E = SM->loadSymbolsFromJSONFile(Conf, &ConfigFilenames);
-    if (LLVM_UNLIKELY(E)) {
-      WithColor::error(errs(), Argv[0])
-        << "Config file \"" << Conf << "\" failed to process.\n"
-        << "reason: " << toString(std::move(E)) << "\n\n";
-      return 1;
-    }
-  }
-#endif
 
   if (NoOutput && !OutputFilepath.empty()) {
     errs() << "WARNING: The -o (output path) option is ignored when the "
@@ -702,26 +682,39 @@ int main(int Argc, char** Argv) {
 
   // TODO: Unique filenames.
   UniqueStringVector ValidFilenames;
-  for (auto& Filename : ConfigFilenames)
-    ValidFilenames.insert(Filename);
   for (auto& Filename : InputFilenames) {
     if (FixupFilename(Filename)) {
       auto [_, DidInsert] = ValidFilenames.try_insert(Filename);
       if (DidInsert)
         continue;
-      WithColor::warning(errs(), Argv[0])
+      WithColor::warning(errs())
         << "Duplicate filename '" << Filename << "'.\n";
       if (Strict)
         return 1;
     } else {
-      WithColor::error(errs(), Argv[0])
+      WithColor::error(errs())
         << "Invalid filename '" << Filename << "'.\n";
       if (Strict)
         return 1;
     }
   }
+  if (!ConfigFile.empty()) {
+    SmallVector<std::string> ConfigFilenames;
+    const auto& Conf = ConfigFile.getValue();
+    Error E = SM->loadSymbolsFromJSONFile(Conf, &ConfigFilenames);
+    if (LLVM_UNLIKELY(E)) {
+      WithColor::error(errs())
+        << "Config file failed to process.\n"
+        << "reason: " << toString(std::move(E)) << "\n\n";
+      return 1;
+    }
+    for (auto& Filename : ConfigFilenames)
+      ValidFilenames.insert(Filename);
+    WithColor::remark(outs())
+      << "Loaded config \"" << Conf << "\".\n";
+  }
   if (ValidFilenames.empty()) {
-    WithColor::error(errs(), Argv[0])
+    WithColor::error(errs())
       << "No valid input files were provided!";
     return 1;
   }
@@ -894,32 +887,21 @@ int main(int Argc, char** Argv) {
     return M;
   };
 
-  // TODO: Load unlinks from a file...
-  SmallVector<std::string, 8> ExampleUnlinks;
-  LoadUnlinks(ExampleUnlinks);
-
-  // Compile the references...
-  UnlinkRefs Refs(ExampleUnlinks);
-  if (Refs.didFail()) {
-    WithColor::error(errs(), Argv[0])
-      << "Failed generating unlink references!";
-    return 1;
-  }
-
   // CheckStuff();
   auto O1OptPasses = GetO1PassesRequiredForSimplification();
-  DeBaser::Factory DBFactory(Refs, Argv, Context);
+  DeBaser::Factory DBFactory(*SM, Argv[0], Context);
 
   ItaniumClassifier IClass;
   MSVCClassifier MClass;
 
   for (StringRef Filename : ValidFilenames) {
+    //errs() << "File: " << Filename << '\n';
     if (Filename.empty())
       continue;
 
     std::optional<DeBaser> DB = DBFactory.New(Filename);
     if (!DB.has_value()) {
-      WithColor::warning(errs(), Argv[0])
+      WithColor::warning(errs())
         << "Failed to generate module for '"
         << Filename << "'.\n";
       if (!Permissive)
@@ -954,15 +936,14 @@ int main(int Argc, char** Argv) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DeBaser::DeBaser(StringRef Filename, UnlinkRefs& Refs,
-                 char* const* Argv, LLVMContext& Context)
-     : Refs(Refs), Argv(Argv) {
-  assert(!Refs.didFail());
+DeBaser::DeBaser(StringRef Filename, SymbolMatcher& SM,
+                 std::string Argv0, LLVMContext& Context)
+    : SM(SM), Argv0(Argv0) {
   loadModule(Filename, Context);
 }
 
 bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
-  if (LoadedModule) {
+  if (LLVM_UNLIKELY(LoadedModule)) {
     if (Filename == M->getName())
       return true;
     error() << "Module for '" << Filename
@@ -972,11 +953,16 @@ bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
 
   M = parseIRFile(Filename, Err, Context);
   if (!M) {
-    Err.print(Argv[0], error());
+    Err.print(Argv0.data(), error());
     return false;
   }
 
   assert(Filename == M->getName());
+  if (Error E = SM.setFilename(Filename)) [[unlikely]] {
+    error() << "Unable to parse file '" << Filename << "'.\n";
+    return false;
+  }
+
   this->LoadedModule = true;
   return true;
 }
@@ -1015,10 +1001,7 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
   for (Function& F : M->getFunctionList()) {
     std::string Name = F.getName().str();
     SymClassifier->classify(Name, &FFeats);
-    if (!FFeats.isCtor() && !FFeats.isDtor())
-      // Not something worth looking at (right now).
-      continue;
-    if (!Refs.match(F.getName()))
+    if (!SM.match(FFeats))
       continue;
     // TODO: Switch when complex added.
     ++EncounteredSimple;
@@ -1040,13 +1023,13 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
     }
   }
 
-  if (Strict && EncounteredSimple != Refs.simpleCount()) {
-    error()
-      << "In '-strict' all simple definitions are required to be encountered. Only "
-      << EncounteredSimple << " were encountered, when "
-      << Refs.simpleCount() << " were required.\n";
-    return false;
-  }
+  //if (Strict && EncounteredSimple != Refs.simpleCount()) {
+  //  error()
+  //    << "In '-strict' all simple definitions are required to be encountered. Only "
+  //    << EncounteredSimple << " were encountered, when "
+  //    << Refs.simpleCount() << " were required.\n";
+  //  return false;
+  //}
 
   this->SetUnlinks = true;
   return true;

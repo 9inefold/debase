@@ -13,6 +13,11 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
 target_link_libraries(${PROJECT_NAME} PUBLIC
   debase::llvm debase::rt
 )
+if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+  target_compile_options(${PROJECT_NAME} PUBLIC
+    -Wall -Wno-unused-private-field -Wno-unused-function -Wno-unused-variable
+  )
+endif()
 #target_compile_options(${PROJECT_NAME} PUBLIC
 #  -fno-exceptions -funwind-tables -stdlib=libc++
 #)

@@ -43,8 +43,11 @@ class SymbolMatcher {
   /// Used to cache pattern mappings.
   llvm::StringMap<Pattern*, llvm::BumpPtrAllocator&> PatternMappings;
 
+public:
   /// The type used to store patterns.
-  using PatternStorageTy = llvm::SmallPtrSet<Pattern*, 4>;
+  using PatternStorageTy = llvm::SmallPtrSet<Pattern*, 8>;
+  
+private:
   /// Patterns used for matching constructors.
   PatternStorageTy CtorPatterns;
   /// Patterns used for matching destructors.
@@ -73,8 +76,10 @@ public:
   llvm::Error loadSymbolsFromJSONFile(StringRef ConfigFile,
                                       SmallVectorImpl<std::string>* OutFiles = nullptr);
 
-  /// TODO: Remove
+  /// TODO: Remove?
   llvm::Error setFilename(StringRef Filename);
+  /// Matches symbol against its respective patterns
+  bool match(const SymbolFeatures& Features) const;
 
   /// Creates a new `Pattern` object if uncached, otherwise returns cached.
   Expected<Pattern*> compilePattern(

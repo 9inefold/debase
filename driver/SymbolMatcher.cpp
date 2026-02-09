@@ -29,7 +29,7 @@
 #include "llvm/Support/Path.h"
 #include "FilePropertyCache.hpp"
 #include "PatternLex.hpp"
-
+#include "SymbolFeatures.hpp"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -73,6 +73,24 @@ Error SymbolMatcher::setFilename(StringRef Filename) {
     }
   }
   return Error::success();
+}
+
+static bool MatchAgainst(const SymbolMatcher::PatternStorageTy& Patterns,
+                         ArrayRef<std::string> Syms) {
+  for (Pattern* P : Patterns)
+    if (P->matchSymbol(Syms))
+      return true;
+  return false;
+}
+
+bool SymbolMatcher::match(const SymbolFeatures& Features) const {
+  if (!Features.isCtorDtor())
+    return false;
+  // Now check specifics.
+  if (Features.isCtor())
+    return MatchAgainst(CtorPatterns, Features.NestedNames);
+  else /*Features.isDtor()*/
+    return MatchAgainst(DtorPatterns, Features.NestedNames); 
 }
 
 StringRef SymbolMatcher::intern(StringRef S) {
@@ -306,6 +324,9 @@ private:
     assert(thiz != nullptr);
   }
 
+  //static Error GetDescriptiveFileError(const Twine& Filename, std::error_code EC) {
+  //}
+
   void addCtor(Pattern* Pat) {
     assert(Pat != nullptr);
     P->CtorPatterns.insert(Pat);
@@ -321,7 +342,8 @@ private:
 
 public:
   Error load();
-  Error loadFiles(json::Array& files);
+  Error loadFilePaths(json::Array& files);
+  Error loadFilePath(StringRef filename);
   Error loadPatterns(json::Object& patterns);
   Error loadPatterns(json::Array& patterns);
   Error loadPattern(StringRef pattern);
@@ -337,16 +359,15 @@ public:
 Expected<JSONLoaderHandler> JSONLoaderHandler::New(StringRef Filename,
                                                    SymbolMatcher* thiz,
                                                    SmallVectorImpl<std::string>* OutFiles) {
-  outs() << Filename << '\n';
   ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
       MemoryBuffer::getFile(Filename);
   if (std::error_code EC = FileOrErr.getError())
-    return llvm::errorCodeToError(EC);
+    return llvm::createFileError(Filename, EC);
   // Parse JSON
   StringRef FileContents = (*FileOrErr)->getBuffer();
   Expected<json::Value> JSON = json::parse(FileContents);
   if (!JSON)
-    return JSON.takeError();
+    return llvm::createFileError(Filename, JSON.takeError());
   // Valid!
   return JSONLoaderHandler(std::move(*JSON), Filename, thiz, OutFiles);
 }
@@ -357,7 +378,10 @@ Error JSONLoaderHandler::load() {
     if (this->OutFiles) {
       // "files": [...]
       if (json::Array* files = root->getArray("files")) {
-        if (Error E = this->loadFiles(*files))
+        if (Error E = this->loadFilePaths(*files))
+          return E;
+      } else if (auto file = root->getString("files")) {
+        if (Error E = this->loadFilePath(*file))
           return E;
       } else
         return report("'files' does not exist or is not an array");
@@ -376,27 +400,48 @@ Error JSONLoaderHandler::load() {
   return report("root node is not an object");
 }
 
-Error JSONLoaderHandler::loadFiles(json::Array& files) {
-  SmallString<128> Buf;
-  StringRef reldir = sys::path::parent_path(Filename);
+Error JSONLoaderHandler::loadFilePath(StringRef filename) {
+  SmallString<128> Filename = filename;
+  StringRef reldir = sys::path::parent_path(this->Filename);
+  // Resolve the file
+  // TODO: Make this fancier
+  sys::fs::make_absolute(reldir, Filename);
+  sys::path::remove_dots(Filename, /*remove_dot_dot=*/true);
+  // Make sure it's a real file!
+  bool IsFile = true;
+  if (auto EC = sys::fs::is_regular_file(Filename.str(), IsFile))
+    return llvm::createFileError(Filename.str(), EC);
+  if (IsFile)
+    OutFiles->emplace_back(static_cast<std::string>(Filename));
+  else if (!P->Permissive)
+    return report("file \"" + Twine(filename) + "\" is not a regular file");
+  return Error::success();
+}
+
+Error JSONLoaderHandler::loadFilePaths(json::Array& files) {
+  SmallString<128> Filename;
+  StringRef reldir = sys::path::parent_path(this->Filename);
   assert(this->OutFiles != nullptr);
-  for (json::Value& _file : files) {
-    auto file = _file.getAsString();
-    if (LLVM_UNLIKELY(!file)) {
+  for (json::Value& _filename : files) {
+    auto filename = _filename.getAsString();
+    if (LLVM_UNLIKELY(!filename)) {
       if (P->Permissive)
         continue;
       return report("filename is not a string");
     }
     // Resolve the file
     // TODO: Make this fancier
-    Buf = *file;
-    sys::fs::make_absolute(reldir, Buf);
+    Filename = *filename;
+    sys::fs::make_absolute(reldir, Filename);
+    sys::path::remove_dots(Filename, /*remove_dot_dot=*/true);
     // Make sure it's a real file!
     bool IsFile = true;
-    if (auto EC = sys::fs::is_regular_file(Buf.str(), IsFile))
-      return errorCodeToError(EC);
+    if (auto EC = sys::fs::is_regular_file(Filename.str(), IsFile))
+      return llvm::createFileError(Filename.str(), EC);
     if (IsFile)
-      OutFiles->emplace_back(static_cast<std::string>(Buf));
+      OutFiles->emplace_back(static_cast<std::string>(Filename));
+    else if (!P->Permissive)
+      return report("file \"" + Twine(*filename) + "\" is not a regular file");
   }
   return Error::success();
 }
@@ -482,7 +527,7 @@ Error SymbolMatcher::loadSymbolsFromJSONFile(
   SmallString<80> ConfigFileReal = ConfigFile;
   //sys::fs::make_absolute(ConfigFileReal);
   if (auto EC = sys::fs::make_absolute(ConfigFileReal))
-    return errorCodeToError(EC);
+    return llvm::createFileError(ConfigFile, EC);
   Expected<JSONLoaderHandler> JSON =
       JSONLoaderHandler::New(ConfigFileReal.str(), this, OutFiles);
   if (!JSON)

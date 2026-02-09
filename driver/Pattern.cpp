@@ -541,7 +541,7 @@ using CompoundLexer = PatternLexer::CompoundLexer;
 
 Error PatternLexer::lex() {
   auto report_pat = [this, S = Pat] (const Twine& Msg) {
-    return PatternLexer::report(S, Msg);
+    return this->report(S, Msg);
   };
 
   // Pre-parsing validation
