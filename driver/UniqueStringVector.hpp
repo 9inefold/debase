@@ -52,15 +52,15 @@ public:
   /// the entry's index + 1 to be used as a unique ID.
   unsigned insert(StringRef Entry) {
     // Check if the entry is already in the map.
-    unsigned& ID = Map[Entry];
+    auto [It, DidInsert] = Map.try_emplace(Entry, 0);
     // See if entry exists, if so return prior ID.
-    if (ID != 0)
-      return ID;
+    if (!DidInsert)
+      return It->second;
     // Compute ID for entry.
-    ID = unsigned(Vector.size()) + 1u;
+    It->second = getCurrentID();
     // Insert in vector.
-    Vector.push_back(Entry);
-    return ID;
+    Vector.push_back(It->first());
+    return It->second;
   }
 
   /// try_insert - Append entry to the vector if it doesn't already exist.
@@ -75,7 +75,7 @@ public:
     // Compute ID for entry.
     It->second = getCurrentID();
     // Insert in vector.
-    Vector.push_back(Entry);
+    Vector.push_back(It->getKey());
     return {It->second, true};
   }
 
