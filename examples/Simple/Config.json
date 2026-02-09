@@ -1,8 +1,6 @@
 {
   "patterns": {
-    "ctor": ["A", "B", "C"],
-    "dtor": ["A", "B", "C"],
-    "all": "E"
+    "all": ["A", "B", "C", "E"]
   },
   "files": [
     "./Simple.ll",

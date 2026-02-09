@@ -22,6 +22,7 @@ struct B : public A {
 };
 
 struct E : public A {
+  B b;
   E() = default;
   NOINLINE E(int V);
   NOINLINE virtual ~E();

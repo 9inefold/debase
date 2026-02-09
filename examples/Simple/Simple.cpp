@@ -20,7 +20,7 @@ NOINLINE C::C(int V) : B(V), y(V, 'x') {
 	__debase_ctor_end();
 }
 
-NOINLINE E::E(int V) : A(V + 1) {
+NOINLINE E::E(int V) : A(V + 1), b(V) {
   __debase_ctor_begin();
   std::printf("E(%i)!\n", V);
 	__debase_ctor_end();
