@@ -750,6 +750,7 @@ DeBaser::DeBaser(StringRef Filename, SymbolMatcher& SM,
   loadModule(Filename, Context);
 }
 
+LLVM_ATTRIBUTE_NOINLINE
 bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
   if (LLVM_UNLIKELY(LoadedModule)) {
     if (Filename == M->getName())
@@ -765,8 +766,14 @@ bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
     return false;
   }
 
-  assert(Filename == M->getName());
-  //M->setModuleIdentifier("")
+  /*Update the ModuleID*/ {
+    std::string ModuleID;
+    raw_string_ostream OS(ModuleID);
+    OS << M->getSourceFileName();
+    if (SM.loadedConfig())
+      OS << '@' << SM.getConfigFilename();
+    M->setModuleIdentifier(ModuleID);
+  }
   if (Error E = SM.setFilename(Filename)) [[unlikely]] {
     error() << "Unable to set filename '" << Filename << "'.\n";
     return false;

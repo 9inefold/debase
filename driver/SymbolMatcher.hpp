@@ -33,6 +33,10 @@
 #include <optional>
 #include <utility>
 
+namespace llvm {
+class Module;
+} // namespace llvm
+
 namespace debase_tool {
 
 class FilePropertyCache;
@@ -58,6 +62,8 @@ private:
   /// Contains replacements
   SmallVector<Replacer*, 4> Replacements;
 
+  /// Filename of the loaded config (if exists)
+  std::optional<StringRef> ConfigFilename;
   /// Filename of the current module.
   std::optional<StringRef> CurrentFilename;
 
@@ -75,7 +81,28 @@ public:
   /// Loads symbol patterns and filenames from a JSON config file.
   llvm::Error loadSymbolsFromJSONFile(StringRef ConfigFile,
                                       SmallVectorImpl<std::string>* OutFiles = nullptr);
+  /// Loads symbol patterns and filenames from a JSON config file.
+  llvm::Error loadConfig(StringRef ConfigFile,
+                         SmallVectorImpl<std::string>* OutFiles = nullptr) {
+    return loadSymbolsFromJSONFile(ConfigFile, OutFiles);
+  }
+  /// Returns the filename of the config file loaded by the matcher.
+  /// If a file was never loaded, returns an empty string.
+  StringRef getConfigFilename() const {
+    if (ConfigFilename)
+      return StringRef(*ConfigFilename);
+    return "";
+  }
+  /// Returns if config was loaded or not.
+  bool loadedConfig() const {
+    return ConfigFilename.has_value();
+  }
 
+private:
+  /// Sets the config filename.
+  void setConfigFilename(StringRef Filename);
+
+public:
   /// TODO: Remove?
   llvm::Error setFilename(StringRef Filename);
   /// Matches symbol against its respective patterns

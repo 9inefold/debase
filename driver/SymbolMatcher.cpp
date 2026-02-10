@@ -23,6 +23,7 @@
 
 #include "SymbolMatcher.hpp"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -543,15 +544,40 @@ Error JSONLoaderHandler::loadPattern(StringRef pattern) {
   return Error::success();
 }
 
+void SymbolMatcher::setConfigFilename(StringRef Filename) {
+  if (ConfigFilename) {
+    assert(false && "Config file has already been set!");
+    return;
+  }
+  SmallString<80> CurrentPath;
+  if (auto EC = sys::fs::current_path(CurrentPath)) {
+    // Use the full path
+    this->ConfigFilename = intern(Filename);
+    return;
+  }
+  // Get the actual relative path
+  if (Filename.consume_front(CurrentPath.str()))
+    if (Filename.starts_with("/"))
+      Filename = Filename.drop_front();
+  this->ConfigFilename = intern(Filename);
+}
+
 Error SymbolMatcher::loadSymbolsFromJSONFile(
     StringRef ConfigFile, SmallVectorImpl<std::string>* OutFiles) {
+  if (ConfigFilename)
+    return MakeError("config file has already been loaded");
+  // Fixup the filename
   SmallString<80> ConfigFileReal = ConfigFile;
-  //sys::fs::make_absolute(ConfigFileReal);
   if (auto EC = sys::fs::make_absolute(ConfigFileReal))
     return llvm::createFileError(ConfigFile, EC);
+  sys::path::make_preferred(ConfigFileReal, sys::path::Style::posix);
+  // Load the config
   Expected<JSONLoaderHandler> JSON =
       JSONLoaderHandler::New(ConfigFileReal.str(), this, OutFiles);
   if (!JSON)
     return JSON.takeError();
-  return JSON->load();
+  if (auto E = JSON->load())
+    return E;
+  setConfigFilename(ConfigFileReal.str());
+  return Error::success();
 }
