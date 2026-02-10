@@ -479,32 +479,7 @@ public:
       DeBaser::ResetInfo(F, PrevInfo);
   }
 
-  bool writeLLVM(const Twine& Dir) {
-    SmallString<80> OutPath;
-    Dir.toVector(OutPath);
-    StringRef OgFileName = sys::path::filename(LLFile);
-    sys::path::append(OutPath, OgFileName);
-    sys::path::replace_extension(OutPath, OutputAssembly ? ".ll" : ".bc");
-    if (auto EC = sys::fs::make_absolute(OutPath)) {
-      errs() << "For \"" << OutPath.str() << "\"" << EC.message() << '\n';
-      return false;
-    }
-    sys::path::remove_dots(OutPath);
-    // Open file
-    std::error_code EC;
-    sys::fs::OpenFlags OFlags =
-        OutputAssembly ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None;
-    //ToolOutputFile OutFile(OutPath.str(), EC, Flags);
-    raw_fd_ostream OS(OutPath.str(), EC,
-        sys::fs::CD_CreateAlways, sys::fs::FA_Write, OFlags);
-    if (EC) {
-      errs() << "For output \"" << OutPath.str() << "\": " << EC.message() << '\n';
-      return false;
-    }
-    // Write data to file
-    M->print(OS, nullptr);
-    return true;
-  }
+  bool writeLLVM(const Twine& Dir);
 
   Triple getTriple() const {
     assert(M && "Module was not initialized!");
@@ -900,6 +875,71 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
 
   this->SetUnlinks = true;
   return true;
+}
+
+static ErrorOr<int> CreateToolOutputFile(StringRef OutPath) {
+  int ResultFD = -1;
+  std::error_code EC = sys::fs::openFile(
+    OutPath, ResultFD,
+    sys::fs::CD_CreateAlways, sys::fs::FA_Write,
+    OutputAssembly ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None
+  );
+  if (EC)
+    return EC;
+  assert(ResultFD != -1);
+  return ResultFD;
+}
+
+bool DeBaser::writeLLVM(const Twine& Dir) {
+  SmallString<80> OutPath;
+  Dir.toVector(OutPath);
+  sys::path::append(OutPath, sys::path::filename(LLFile));
+  sys::path::replace_extension(OutPath, OutputAssembly ? ".ll" : ".bc");
+  if (auto EC = sys::fs::make_absolute(OutPath)) {
+    errs() << "For \"" << OutPath.str() << "\"" << EC.message() << '\n';
+    return false;
+  }
+  sys::path::remove_dots(OutPath);
+#if 1
+  // Open file
+  ErrorOr<int> FDOrErr = CreateToolOutputFile(OutPath.str());
+  if (auto EC = FDOrErr.getError()) {
+    errs() << "While opening \"" << OutPath.str() << "\""
+           << EC.message() << '\n';
+    return false;
+  }
+  ToolOutputFile TheFile(OutPath.str(), *FDOrErr);
+  auto& OS = TheFile.os();
+  // Write data to file
+  M->print(OS, nullptr);
+  if (auto EC = OS.error()) {
+    OS.clear_error();
+    errs() << "While writing \"" << OutPath.str() << "\"" << EC.message() << '\n';
+    return false;
+  }
+  TheFile.keep();
+  return true;
+#else
+  // Open file
+  std::error_code EC;
+  sys::fs::OpenFlags OFlags =
+      OutputAssembly ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None;
+  raw_fd_ostream OS(OutPath.str(), EC,
+      sys::fs::CD_CreateAlways, sys::fs::FA_Write, OFlags);
+  if (EC) {
+    errs() << "For output \"" << OutPath.str() << "\": " << EC.message() << '\n';
+    return false;
+  }
+  // Write data to file
+  M->print(OS, nullptr);
+  if (OS.has_error()) {
+    EC = OS.error();
+    OS.clear_error();
+    errs() << "While writing \"" << OutPath.str() << "\"" << EC.message() << '\n';
+    return false;
+  }
+  return true;
+#endif
 }
 
 int main(int Argc, char** Argv) {
