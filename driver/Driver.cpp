@@ -75,7 +75,8 @@
 # define DbgBuryPointer(...) ((void)0)
 #endif
 
-#if 0
+#define DO_DBG_STMT 0
+#if DO_DBG_STMT
 # define DBG_STMT(...) __VA_ARGS__
 #else
 # define DBG_STMT(...) ((void)0)
@@ -478,7 +479,7 @@ public:
       DeBaser::ResetInfo(F, PrevInfo);
   }
 
-  void writeLLVM(const Twine& Dir) {
+  bool writeLLVM(const Twine& Dir) {
     SmallString<80> OutPath;
     Dir.toVector(OutPath);
     StringRef OgFileName = sys::path::filename(LLFile);
@@ -486,20 +487,23 @@ public:
     sys::path::replace_extension(OutPath, OutputAssembly ? ".ll" : ".bc");
     if (auto EC = sys::fs::make_absolute(OutPath)) {
       errs() << "For \"" << OutPath.str() << "\"" << EC.message() << '\n';
-      return;
+      return false;
     }
     sys::path::remove_dots(OutPath);
     // Open file
     std::error_code EC;
-    sys::fs::OpenFlags Flags =
+    sys::fs::OpenFlags OFlags =
         OutputAssembly ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None;
-    ToolOutputFile OutFile(OutPath.str(), EC, Flags);
+    //ToolOutputFile OutFile(OutPath.str(), EC, Flags);
+    raw_fd_ostream OS(OutPath.str(), EC,
+        sys::fs::CD_CreateAlways, sys::fs::FA_Write, OFlags);
     if (EC) {
-      errs() << "For \"" << OutPath.str() << "\": " << EC.message() << '\n';
-      return;
+      errs() << "For output \"" << OutPath.str() << "\": " << EC.message() << '\n';
+      return false;
     }
     // Write data to file
-    M->print(OutFile.os(), nullptr);
+    M->print(OS, nullptr);
+    return true;
   }
 
   Triple getTriple() const {
@@ -622,9 +626,23 @@ static void PrintCall(CallBase& I, int type) {
 
 static void IterateInstructions(Function* F, function_ref<bool(CallBase&)> CB) {
   for (BasicBlock& BB : *F) {
-    if (auto Name = BB.getName(); !Name.empty())
-      DBG_STMT(WithColor(errs(), raw_ostream::GREEN)
-                  << '\n' << BB.getName() << ":\n");
+#if DO_DBG_STMT
+    {
+      WithColor OS(errs());
+      bool IsEntryBlock = BB.getParent() && BB.isEntryBlock();
+      if (BB.hasName()) {
+        OS << raw_ostream::CYAN << '\n' << BB.getName() << ":\n";
+      } else if (!IsEntryBlock) {
+        OS << '\n';
+        //int Slot = Machine.getLocalSlot(BB);
+        //if (Slot != -1)
+        //  OS << Slot << ":\n";
+        //else
+        //  OS << "<badref>:\n";
+        OS << "*:\n";
+      }
+    }
+#endif
     for (Instruction& I : BB) {
       if (!isa<CallBase>(I)) {
         DBG_STMT(I.print(errs() << '\n'));
@@ -773,6 +791,7 @@ bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
   }
 
   assert(Filename == M->getName());
+  //M->setModuleIdentifier("")
   if (Error E = SM.setFilename(Filename)) [[unlikely]] {
     error() << "Unable to set filename '" << Filename << "'.\n";
     return false;
@@ -788,6 +807,14 @@ bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
       NamedMDNode* NMD = &*M->named_metadata_begin();
       M->eraseNamedMetadata(NMD);
     }
+  }
+
+  // Immediately run the verifier to catch any problems before starting up the
+  // pass pipelines. Otherwise we can crash on broken code during
+  // doInitialization().
+  if (!NoVerify && verifyModule(*M, &errs())) {
+    error() << "input module is broken!\n";
+    return false;
   }
 
   this->LoadedModule = true;
@@ -912,6 +939,14 @@ int main(int Argc, char** Argv) {
   if (NoOutput && !OutputFilepath.empty()) {
     errs() << "WARNING: The -o (output path) option is ignored when the "
               "-disable-output option is used.\n";
+  } else if (!OutputFilepath.empty()) {
+    StringRef Dir = OutputFilepath.getValue();
+    if (auto EC = sys::fs::create_directories(Dir)) {
+      WithColor::error(errs())
+        << "Error creating \"" << Dir << "\": "
+        << EC.message() << '\n';
+      return 1;
+    }
   }
 
   // TODO: Unique filenames.
@@ -1170,15 +1205,17 @@ int main(int Argc, char** Argv) {
     DB->runPasses(O1OptPasses);
     DB->debaseFunctions();
     DB->resetFunctionAttrs();
-    // TODO: Run aggressive optimizer
+    // TODO: Run aggressive optimizer?
     // Write module
-    if (!NoOutput)
-      DB->writeLLVM(OutputFilepath.getValue());
-  }
+    if (!NoOutput) {
+      if (!DB->writeLLVM(OutputFilepath.getValue()))
+        WithColor::warning(errs()) << "Unable to write file.\n";
+    }
 
-  if (Verbose) {
-    outs().flush();
-    errs() << '\n';
+    if (Verbose) {
+      outs().flush();
+      errs() << '\n';
+    }
   }
 }
 
