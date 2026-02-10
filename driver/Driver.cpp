@@ -75,6 +75,12 @@
 # define DbgBuryPointer(...) ((void)0)
 #endif
 
+#if 0
+# define DBG_STMT(...) __VA_ARGS__
+#else
+# define DBG_STMT(...) ((void)0)
+#endif
+
 using namespace llvm;
 using namespace debase_tool;
 
@@ -359,18 +365,6 @@ static CodeGenOptLevel GetCodeGenOptLevel() { return CodeGenOptLevel::Less; }
 /// Gets some basic passes we can run on functions.
 static std::vector<FunctionPass*> GetO1PassesRequiredForSimplification();
 
-static bool LoadUnlinks(SmallVectorImpl<std::string>& Unlinks) {
-  static constexpr StringRef ExampleUnlinks[] {
-    "A", "B", "C", "E",
-    //"D<*>",
-    //"\"e::*\""
-  };
-  // TODO: Load unlinks from a file...
-  constexpr std::size_t N = std::size(ExampleUnlinks);
-  Unlinks.append(ExampleUnlinks, ExampleUnlinks + N);
-  return true;
-}
-
 namespace {
 
 /// The actual implementation of the debaser.
@@ -379,6 +373,8 @@ class DeBaser {
   SMDiagnostic Err;
   /// The matcher for the current module group.
   SymbolMatcher& SM;
+  /// The original filename.
+  std::string LLFile;
   /// The commandline (for diagnostics).
   StringRef Argv0;
 
@@ -388,6 +384,8 @@ class DeBaser {
   struct PrevFunctionInfo {
     bool HadNoinline : 1 = false;
     bool HadAlwaysinline : 1 = false;
+    bool IsCtor : 1 = false;
+    bool IsDtor : 1 = false;
     //bool HadUsed : 1 = false;
   };
 
@@ -402,6 +400,10 @@ class DeBaser {
   Function* BI__debase_mark_begin = nullptr;
   Function* BI__debase_mark_end = nullptr;
   Function* BI__debase_continuation = nullptr;
+  // Clang builtins
+  Function* BI__clang_call_terminate = nullptr;
+  // Holds builtins
+  SmallPtrSet<Function*, 4> BISet;
 
   bool LoadedModule : 1 = false;
   bool SetUnlinks : 1 = false;
@@ -466,6 +468,7 @@ public:
     }
     for (auto [F, _] : LocatedRefs) {
       this->debaseFunction(F);
+      DBG_STMT(F->print(errs() << '\n'));
     }
   }
 
@@ -473,6 +476,30 @@ public:
   void resetFunctionAttrs() {
     for (auto [F, PrevInfo] : LocatedRefs)
       DeBaser::ResetInfo(F, PrevInfo);
+  }
+
+  void writeLLVM(const Twine& Dir) {
+    SmallString<80> OutPath;
+    Dir.toVector(OutPath);
+    StringRef OgFileName = sys::path::filename(LLFile);
+    sys::path::append(OutPath, OgFileName);
+    sys::path::replace_extension(OutPath, OutputAssembly ? ".ll" : ".bc");
+    if (auto EC = sys::fs::make_absolute(OutPath)) {
+      errs() << "For \"" << OutPath.str() << "\"" << EC.message() << '\n';
+      return;
+    }
+    sys::path::remove_dots(OutPath);
+    // Open file
+    std::error_code EC;
+    sys::fs::OpenFlags Flags =
+        OutputAssembly ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None;
+    ToolOutputFile OutFile(OutPath.str(), EC, Flags);
+    if (EC) {
+      errs() << "For \"" << OutPath.str() << "\": " << EC.message() << '\n';
+      return;
+    }
+    // Write data to file
+    M->print(OutFile.os(), nullptr);
   }
 
   Triple getTriple() const {
@@ -486,7 +513,7 @@ public:
 
 private:
   /// Gets a `PrevFunctionInfo` while updating the function.
-  static PrevFunctionInfo GetInfoAndUpdate(Function* F);
+  static PrevFunctionInfo GetInfoAndUpdate(Function* F, const SymbolFeatures& FFeats);
   /// Resets a `Function` using `PrevFunctionInfo`.
   static void ResetInfo(Function* F, const PrevFunctionInfo& Info);
 
@@ -503,10 +530,12 @@ private:
   bool debaseDestructor(Function* F);
 
   /// Checks if type is ctor or dtor.
-  bool isConstructor(Function* F) {
+  bool isConstructor(Function* F) const {
     // TODO: Change this!
-    return false;
+    return LocatedRefs.at(F).IsCtor;
   }
+  /// Checks if is removable
+  bool isRemovableFunction(Function* F) const;
 };
 
 } // namespace `anonymous`
@@ -515,11 +544,20 @@ bool DeBaser::loadRefsAndBuiltins() {
   if (!loadAndUpdateRefsFromModule())
     return false;
   this->SetUnlinks = true;
+  auto LoadFunction = [this] (StringRef BIName) -> Function* {
+    auto* F = M->getFunction(BIName);
+    if (F)
+      BISet.insert(F);
+    return F;
+  };
   // Load builtins...
-  BI__debase_mark_begin   = M->getFunction("__debase_mark_begin");
-  BI__debase_mark_end     = M->getFunction("__debase_mark_end");
-  BI__debase_continuation = M->getFunction("__debase_continuation");
-  return true;
+  BI__debase_mark_begin   = LoadFunction("__debase_mark_begin");
+  BI__debase_mark_end     = LoadFunction("__debase_mark_end");
+  BI__debase_continuation = LoadFunction("__debase_continuation");
+  // Load clang builtins
+  BI__clang_call_terminate = M->getFunction("__clang_call_terminate");
+  // Check builtins loaded
+  return (BI__debase_mark_begin && BI__debase_mark_end);
 }
 
 void DeBaser::runPasses(const std::vector<FunctionPass*>& Passes, StringRef PassName) {
@@ -547,93 +585,166 @@ void DeBaser::runPasses(const std::vector<FunctionPass*>& Passes, StringRef Pass
 }
 
 bool DeBaser::debaseFunction(Function* F) {
-  errs() << llvm::demangle(F->getName()) << ": "
-         << F->getInstructionCount();
+  DBG_STMT(
+    errs() << "\n\n" << llvm::demangle(F->getName()) << ": "
+           << F->getInstructionCount());
   // TODO: Check the type of the function (ctor or dtor)!
-  if (this->isConstructor(F))
+  if (isConstructor(F))
     return debaseConstructor(F);
   else
     return debaseDestructor(F);
 }
 
-static void AssignFoundInstr(Instruction*& Out, Instruction* Found) {
-  if (Out != nullptr) {
-    // TODO: Error?
-    return;
+LLVM_ATTRIBUTE_NOINLINE
+static void PrintCall(CallBase& I, int type) {
+  switch (type) {
+  // To be kept
+  case 0: {
+    WithColor OS(errs(), raw_ostream::GREEN);
+    I.print(OS << '\n');
+    break;
   }
-  Out = Found;
+  // To be removed
+  case 1: {
+    WithColor OS(errs(), raw_ostream::RED);
+    I.print(OS << '\n');
+    break;
+  }
+  // Builtin
+  case 2:
+  default: {
+    WithColor OS(errs(), raw_ostream::YELLOW);
+    I.print(OS << '\n');
+    break;
+  }
+  }
 }
 
-static void SkimFunctionInstrs(Function* F, llvm::function_ref<bool(CallBase&)> CheckCallInst) {
+static void IterateInstructions(Function* F, function_ref<bool(CallBase&)> CB) {
   for (BasicBlock& BB : *F) {
+    if (auto Name = BB.getName(); !Name.empty())
+      DBG_STMT(WithColor(errs(), raw_ostream::GREEN)
+                  << '\n' << BB.getName() << ":\n");
     for (Instruction& I : BB) {
-      if (!isa<CallInst, CallBrInst>(I)) {
-        if (isa<InvokeInst>(BB))
-          I.print(errs() << '\n');
+      if (!isa<CallBase>(I)) {
+        DBG_STMT(I.print(errs() << '\n'));
         continue;
       }
       // CallBase
-      I.print(errs() << '\n');
-      auto& CB = static_cast<CallBase&>(I);
-      if (CheckCallInst(CB))
+      if (!CB(cast<CallBase>(I)))
         return;
     }
   }
-  // Didn't find the necessary values?
+}
+
+bool DeBaser::isRemovableFunction(Function* F) const {
+  //errs() << raw_ostream::RESET << "\n*" << F->getName() << "*\n";
+  if (F == BI__clang_call_terminate)
+    return false;
+  StringRef FName = F->getName();
+  if (FName.starts_with("__cxa_"))
+    return false;
+  else if (FName.starts_with("__clang_"))
+    return false;
+  else if (FName.starts_with("llvm."))
+    return false;
+  //if (SymClassifier->isMSVC())
+  //  return true;
+  else 
+    return true;
 }
 
 bool DeBaser::debaseConstructor(Function* F) {
   Instruction* Begin = nullptr;
-  Instruction* Continue = nullptr;
-  int FoundCount = 0;
+  //Instruction* Continue = nullptr;
+  SmallPtrSet<Instruction*, 32> ToRemove;
 
-  auto CheckCallInstForDebaseMarkers = [&] (CallBase& CB) {
-    Function* Called = CB.getCalledFunction();
-    if (Called == nullptr)
-      return false;
-    // Determine type.
-    if (Called == BI__debase_mark_begin)
-      AssignFoundInstr(Begin, &CB);
-    else if (Called == BI__debase_continuation)
-      AssignFoundInstr(Continue, &CB);
-    else
-      return false;
-    return ++FoundCount >= 2;
+  auto ScanFunc = [&, this] (CallBase& I) -> bool {
+    Function* IDest = I.getCalledFunction();
+    if (!IDest) {
+      if (!I.isIndirectCall())
+        return false;
+      DBG_STMT(I.print(errs() << '\n'));
+      return true;
+    }
+    // Check if this is a __debase pseudofunction
+    if (BISet.contains(IDest)) {
+      // Check which one it is :)
+      if (BI__debase_mark_begin == IDest) {
+        if (!Begin)
+          Begin = &I;
+        // We don't exit here so we can remove all builtins
+      }
+      DBG_STMT(PrintCall(I, 2));
+      ToRemove.insert(&I);
+      return true;
+    }
+    // Add all calls before beginning of ctor
+    if (Begin == nullptr)
+      if (this->isRemovableFunction(IDest))
+        ToRemove.insert(&I);
+    DBG_STMT(PrintCall(I, ToRemove.contains(&I)));
+    return true;
   };
 
-  SkimFunctionInstrs(F, CheckCallInstForDebaseMarkers);
-  errs() << '\n';
+  IterateInstructions(F, ScanFunc);
+  // Remove it all
+  for (Instruction* I : ToRemove) {
+    if (LLVM_UNLIKELY(I->isSafeToRemove())) {
+      WithColor::warning(errs())
+        << "Unable to remove instruction.\n";
+      continue;
+    }
+    I->eraseFromParent();
+  }
 
-  if (Begin == nullptr)
-    return false;
-  // TODO...
   return true;
 }
 
 bool DeBaser::debaseDestructor(Function* F) {
   Instruction* End = nullptr;
-  Instruction* Continue = nullptr;
-  int FoundCount = 0;
+  //Instruction* Continue = nullptr;
+  SmallPtrSet<Instruction*, 32> ToRemove;
 
-  auto CheckCallInstForDebaseMarkers = [&] (CallBase& CB) {
-    Function* Called = CB.getCalledFunction();
-    if (Called == nullptr)
-      return false;
-    // Determine type.
-    if (Called == BI__debase_mark_end)
-      AssignFoundInstr(End, &CB);
-    else if (Called == BI__debase_continuation)
-      AssignFoundInstr(Continue, &CB);
-    else
-      return false;
-    return ++FoundCount >= 2;
+  auto ScanFunc = [&, this] (CallBase& I) -> bool {
+    Function* IDest = I.getCalledFunction();
+    if (!IDest) {
+      if (!I.isIndirectCall())
+        return false;
+      I.print(errs() << '\n');
+      return true;
+    }
+    // Check if this is a __debase pseudofunction
+    if (BISet.contains(IDest)) {
+      // Check which one it is :)
+      if (BI__debase_mark_end == IDest) {
+        if (!End)
+          End = &I;
+        // We don't exit here so we can remove all builtins
+      }
+      DBG_STMT(PrintCall(I, 2));
+      ToRemove.insert(&I);
+      return true;
+    }
+    // Add all calls before beginning of ctor
+    if (End != nullptr)
+      if (this->isRemovableFunction(IDest))
+        ToRemove.insert(&I);
+    DBG_STMT(PrintCall(I, ToRemove.contains(&I)));
+    return true;
   };
 
-  SkimFunctionInstrs(F, CheckCallInstForDebaseMarkers);
-  errs() << '\n';
+  IterateInstructions(F, ScanFunc);
+  // Remove it all
+  for (Instruction* I : ToRemove) {
+    if (LLVM_UNLIKELY(I->isSafeToRemove())) {
+      WithColor::warning(errs())
+        << "Unable to remove instruction.\n";
+      continue;
+    }
+    I->eraseFromParent();
+  }
 
-  if (End == nullptr)
-    return false;
   // TODO...
   return true;
 }
@@ -642,7 +753,7 @@ bool DeBaser::debaseDestructor(Function* F) {
 
 DeBaser::DeBaser(StringRef Filename, SymbolMatcher& SM,
                  std::string Argv0, LLVMContext& Context)
-    : SM(SM), Argv0(Argv0) {
+    : SM(SM), LLFile(Filename), Argv0(Argv0) {
   loadModule(Filename, Context);
 }
 
@@ -655,9 +766,6 @@ bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
     return false;
   }
 
-  volatile int III = Filename.front() + Filename.back();
-  //Context.pImpl
-  //errs() << "File: " << Filename << '\n';
   M = parseIRFile(Filename, Err, Context);
   if (!M) {
     Err.print(Argv0.data(), error());
@@ -666,19 +774,33 @@ bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
 
   assert(Filename == M->getName());
   if (Error E = SM.setFilename(Filename)) [[unlikely]] {
-    error() << "Unable to parse file '" << Filename << "'.\n";
+    error() << "Unable to set filename '" << Filename << "'.\n";
     return false;
+  }
+
+  // Strip debug info before running the verifier.
+  if (StripDebug)
+    llvm::StripDebugInfo(*M);
+
+  // Erase module-level named metadata, if requested.
+  if (StripNamedMetadata) {
+    while (!M->named_metadata_empty()) {
+      NamedMDNode* NMD = &*M->named_metadata_begin();
+      M->eraseNamedMetadata(NMD);
+    }
   }
 
   this->LoadedModule = true;
   return true;
 }
 
-DeBaser::PrevFunctionInfo DeBaser::GetInfoAndUpdate(Function* F) {
+DeBaser::PrevFunctionInfo DeBaser::GetInfoAndUpdate(Function* F, const SymbolFeatures& FFeats) {
   using enum Attribute::AttrKind;
   PrevFunctionInfo Info {
     .HadNoinline      = F->hasFnAttribute(NoInline),
-    .HadAlwaysinline  = F->hasFnAttribute(AlwaysInline)
+    .HadAlwaysinline  = F->hasFnAttribute(AlwaysInline),
+    .IsCtor           = FFeats.isCtor(),
+    .IsDtor           = FFeats.isDtor()
   };
   if (!Info.HadNoinline)
     F->addFnAttr(NoInline);
@@ -708,8 +830,19 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
   for (Function& F : M->getFunctionList()) {
     std::string Name = F.getName().str();
     SymClassifier->classify(Name, &FFeats);
+    if (!FFeats.isCtorDtor())
+      continue;
+    // Check if itanium deleting destructor
+    if (FFeats.Variant == 0)
+      continue;
     if (!SM.match(FFeats))
       continue;
+    // Check if this is an inline function
+    if (Comdat* C = F.getComdat()) {
+      WithColor::note(vbss())
+        << "Skipping " << F.getName() << ", has comdat tag.\n";
+      continue;
+    }
     // TODO: Switch when complex added.
     //++EncounteredSimple;
 
@@ -723,9 +856,9 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
       continue;
     }
 
-    It->second = GetInfoAndUpdate(&F);
+    It->second = GetInfoAndUpdate(&F, FFeats);
     if (Verbose) {
-      WithColor::note(outs())
+      WithColor::note(vbss())
         << "Found " << F.getName() << '\n';
     }
   }
@@ -1000,13 +1133,13 @@ int main(int Argc, char** Argv) {
   MSVCClassifier MClass;
 
   for (StringRef Filename : ValidFilenames) {
-    LLVMContext LocalCtx;
-    //errs() << "File: " << Filename << '\n';
+    //LLVMContext LocalCtx;
+    vbss() << "File: " << Filename << '\n';
     if (Filename.empty())
       continue;
 
-    //std::optional<DeBaser> DB = DBFactory.New(Filename);
-    std::optional<DeBaser> DB = DBFactory.New(Filename, LocalCtx);
+    std::optional<DeBaser> DB = DBFactory.New(Filename);
+    //std::optional<DeBaser> DB = DBFactory.New(Filename, LocalCtx);
     if (!DB.has_value()) {
       WithColor::warning(errs())
         << "Failed to generate module for '"
@@ -1037,7 +1170,15 @@ int main(int Argc, char** Argv) {
     DB->runPasses(O1OptPasses);
     DB->debaseFunctions();
     DB->resetFunctionAttrs();
-    // Run aggressive optimizer
+    // TODO: Run aggressive optimizer
+    // Write module
+    if (!NoOutput)
+      DB->writeLLVM(OutputFilepath.getValue());
+  }
+
+  if (Verbose) {
+    outs().flush();
+    errs() << '\n';
   }
 }
 

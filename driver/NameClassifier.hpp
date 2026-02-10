@@ -42,6 +42,7 @@ class Classifier {
 public:
   virtual SymbolKind classify(const std::string& Sym, SymbolFeatures* Out) = 0;
   SymbolKind classify(const std::string& Sym) { return classify(Sym, nullptr); }
+  virtual bool isMSVC() const = 0;
 private:
   virtual void anchor();
 };
@@ -51,6 +52,7 @@ class ItaniumClassifier final : public Classifier {
 public:
   SymbolKind classify(const std::string& Sym, SymbolFeatures* Out) override;
   SymbolKind classify(const std::string& Sym) { return classify(Sym, nullptr); }
+  bool isMSVC() const override { return false; }
 };
 
 /// Classifies symbols from the Microsoft ABI.
@@ -58,6 +60,7 @@ class MSVCClassifier final : public Classifier {
 public:
   SymbolKind classify(const std::string& Sym, SymbolFeatures* Out) override;
   SymbolKind classify(const std::string& Sym) { return classify(Sym, nullptr); }
+  bool isMSVC() const override { return false; }
 };
 
 } // namespace debase_tool

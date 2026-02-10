@@ -32,7 +32,7 @@ std::optional<bool> debase_tool::checkTripleTargetSymbolType(const Triple& T) {
   case Triple::ArchType::aarch64:
   case Triple::ArchType::aarch64_be: {
     using enum Triple::SubArchType;
-    if (SubArch != ARMSubArch_v7 || SubArch != ARMSubArch_v8)
+    if (SubArch != ARMSubArch_v7 && SubArch != ARMSubArch_v8)
       return std::nullopt;
   }
   case Triple::ArchType::arm:
