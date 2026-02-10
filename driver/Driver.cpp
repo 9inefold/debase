@@ -32,6 +32,7 @@
 #include "llvm/Demangle/Demangle.h"
 // #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Option/OptTable.h"
 #include "llvm/Option/Option.h"
@@ -153,8 +154,11 @@ DumpModule("dump-module", cl::Hidden,
 // The following options were taken from llvm opt:
 static cl::OptionCategory& OptToolCategory = DebaseToolCategory;
 
-// Always enabled!
-static constexpr bool OutputAssembly = true;
+//static constexpr bool OutputAssembly = true;
+static cl::opt<bool>
+OutputAssembly("output-assembly",
+               cl::desc("Output LLVM assembly instead of bitcode"),
+               cl::cat(OptToolCategory));
 
 static cl::opt<bool>
 PrintPasses("print-passes",
@@ -907,7 +911,6 @@ bool DeBaser::writeLLVM(const Twine& Dir) {
     return false;
   }
   sys::path::remove_dots(OutPath);
-#if 1
   // Open file
   ErrorOr<int> FDOrErr = CreateToolOutputFile(OutPath.str());
   if (auto EC = FDOrErr.getError()) {
@@ -918,7 +921,16 @@ bool DeBaser::writeLLVM(const Twine& Dir) {
   ToolOutputFile TheFile(OutPath.str(), *FDOrErr);
   auto& OS = TheFile.os();
   // Write data to file
-  M->print(OS, nullptr);
+  if (OutputAssembly)
+    M->print(OS, nullptr);
+  else {
+    bool IsNewDbgInfoFormat = M->IsNewDbgInfoFormat;
+    if (IsNewDbgInfoFormat)
+      M->convertFromNewDbgValues();
+    WriteBitcodeToFile(*M, OS);
+    if (IsNewDbgInfoFormat)
+      M->convertToNewDbgValues();
+  }
   if (auto EC = OS.error()) {
     OS.clear_error();
     errs() << "While writing \"" << OutPath.str() << "\"" << EC.message() << '\n';
@@ -926,27 +938,6 @@ bool DeBaser::writeLLVM(const Twine& Dir) {
   }
   TheFile.keep();
   return true;
-#else
-  // Open file
-  std::error_code EC;
-  sys::fs::OpenFlags OFlags =
-      OutputAssembly ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None;
-  raw_fd_ostream OS(OutPath.str(), EC,
-      sys::fs::CD_CreateAlways, sys::fs::FA_Write, OFlags);
-  if (EC) {
-    errs() << "For output \"" << OutPath.str() << "\": " << EC.message() << '\n';
-    return false;
-  }
-  // Write data to file
-  M->print(OS, nullptr);
-  if (OS.has_error()) {
-    EC = OS.error();
-    OS.clear_error();
-    errs() << "While writing \"" << OutPath.str() << "\"" << EC.message() << '\n';
-    return false;
-  }
-  return true;
-#endif
 }
 
 int main(int Argc, char** Argv) {
