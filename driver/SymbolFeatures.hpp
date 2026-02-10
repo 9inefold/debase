@@ -32,7 +32,7 @@ namespace debase_tool {
 /// The useful features found in a function symbol.
 struct SymbolFeatures {
   //std::string BaseName;
-  SmallVector<std::string, 2> NestedNames;
+  SmallVector<std::string> NestedNames;
   SymbolKind SymKind = SymbolKind::Invalid;
   int Variant = -1; // For itanium compat
   bool HasBaseName = false;

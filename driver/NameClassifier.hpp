@@ -60,7 +60,7 @@ class MSVCClassifier final : public Classifier {
 public:
   SymbolKind classify(const std::string& Sym, SymbolFeatures* Out) override;
   SymbolKind classify(const std::string& Sym) { return classify(Sym, nullptr); }
-  bool isMSVC() const override { return false; }
+  bool isMSVC() const override { return true; }
 };
 
 } // namespace debase_tool

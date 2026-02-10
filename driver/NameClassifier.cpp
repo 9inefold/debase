@@ -532,7 +532,7 @@ static void printAST(Node* AST, std::string_view Name, raw_ostream& OS) {
 
 static SymbolKind ClassifyFunction(
     Node* ASTVal, SymbolFeatures* Out, std::string_view Name) {
-  if (!ASTVal || ASTVal->kind() == NodeKind::FunctionSymbol)
+  if (!ASTVal || ASTVal->kind() != NodeKind::FunctionSymbol)
     // Log here? Could be something else of importance.
     return SymbolKind::Invalid;
   
@@ -566,7 +566,7 @@ static SymbolKind ClassifyFunction(
                                  const std::string_view* BName = nullptr) -> SymbolKind {
     if (Out != nullptr) {
       Out->SymKind = K;
-      for (Node* Nested : QualName) {
+      for (Node* Nested : QualName.drop_back(BName ? 1 : 0)) {
         assert(Nested != nullptr && "Invalid QualName value?");
         Out->addNested(GetNamePart(Nested));
       }
