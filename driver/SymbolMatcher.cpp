@@ -314,7 +314,6 @@ LLVM_DUMP_METHOD void SymbolMatcher::dump() const {
     OS << "\n      Dtor: " << DtorPatterns.contains(KV.second) << '\n';
   }
   OS << "  ]\n}\n";
-  OS << "}\n";
 }
 #endif
 
