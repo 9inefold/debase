@@ -10,10 +10,11 @@ add_executable(${PROJECT_NAME}
   UnlinkRefs.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
-target_link_libraries(${PROJECT_NAME} PUBLIC
-  debase::llvm debase::rt
-)
-if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+target_link_libraries(${PROJECT_NAME} PUBLIC debase::llvm debase::rt)
+if(WIN32)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC _HAS_ITERATOR_DEBUGGING=0)
+endif(WIN32)
+if(NOT DEBASE_MSVC_LIKE)
   target_compile_options(${PROJECT_NAME} PUBLIC
     -Wall -Wno-unused-private-field -Wno-unused-function -Wno-unused-variable
     #-fsanitize=address
@@ -37,7 +38,3 @@ add_custom_command(
   POST_BUILD
 )
 add_dependencies(${PROJECT_NAME} move-zlib)
-
-if(WIN32)
-  target_compile_definitions(${PROJECT_NAME} PRIVATE -D_HAS_ITERATOR_DEBUGGING=0)
-endif(WIN32)

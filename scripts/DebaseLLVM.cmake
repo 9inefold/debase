@@ -20,13 +20,6 @@ llvm_map_components_to_libnames(llvm_libs
   Core Demangle Option Support
 )
 
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
-message(STATUS "LLVM includes: ${LLVM_INCLUDE_DIRS}")
-message(STATUS "LLVM definitions: ${LLVM_DEFINITIONS}")
-message(STATUS "LLVM tools: ${LLVM_TOOLS_BINARY_DIR}")
-
 function(dump_llvm_libs lib_var)
   list(TRANSFORM ${lib_var}
 		REPLACE "^LLVM" ""
@@ -36,8 +29,13 @@ function(dump_llvm_libs lib_var)
 	message(STATUS "LLVM libs: ${LLVM_SHORT_AVAILABLE_LIBS}")
 endfunction(dump_llvm_libs)
 
-set(DUMP_LIBS ON)
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 if(DEFINED DUMP_LIBS AND DUMP_LIBS)
+  message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+  message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
+  message(STATUS "LLVM includes: ${LLVM_INCLUDE_DIRS}")
+  message(STATUS "LLVM definitions: ${LLVM_DEFINITIONS}")
+  message(STATUS "LLVM tools: ${LLVM_TOOLS_BINARY_DIR}")
 	#dump_llvm_libs(LLVM_AVAILABLE_LIBS)
 	dump_llvm_libs(llvm_libs)
 endif()
