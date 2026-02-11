@@ -24,6 +24,7 @@
 #pragma once
 
 #include "LLVM.hpp"
+#include <string>
 
 namespace debase_tool {
 

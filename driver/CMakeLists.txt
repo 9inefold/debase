@@ -1,5 +1,7 @@
 include_guard(DIRECTORY)
 
+add_subdirectory(compat)
+
 add_executable(${PROJECT_NAME}
   Driver.cpp
   FilePropertyCache.cpp
@@ -10,7 +12,8 @@ add_executable(${PROJECT_NAME}
   UnlinkRefs.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
-target_link_libraries(${PROJECT_NAME} PUBLIC debase::llvm debase::rt)
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  debase::llvm debase::rt debase::msvc-compat)
 if(WIN32)
   target_compile_definitions(${PROJECT_NAME} PUBLIC _HAS_ITERATOR_DEBUGGING=0)
 endif(WIN32)
@@ -21,9 +24,6 @@ if(NOT DEBASE_MSVC_LIKE)
   )
   #target_link_options(${PROJECT_NAME} PUBLIC -fsanitize=address)
 endif()
-#target_compile_options(${PROJECT_NAME} PUBLIC
-#  -fno-exceptions -funwind-tables -stdlib=libc++
-#)
 
 foreach(target IN LISTS DEBASE_TARGETS)
   set(DEBASE_TARGETS_X "${DEBASE_TARGETS_X} X(${target})") 

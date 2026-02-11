@@ -302,7 +302,7 @@ SymbolKind ItaniumClassifier::classify(const std::string& Sym, SymbolFeatures* O
   if (Sym.empty())
     return SymbolKind::Invalid;
   std::string_view SymL = Sym;
-  IDemangler D(SymL.begin(), SymL.end());
+  IDemangler D(&*SymL.begin(), &*SymL.end());
   Node* AST = D.parse(/*ParseParams=*/false);
   if (AST == nullptr)
     // Print error?

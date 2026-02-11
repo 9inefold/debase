@@ -16,6 +16,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <xutility>
 #include "Shared.hpp"
 #include "FilePropertyCache.hpp"
 #include "LLVMTargets.hpp"
