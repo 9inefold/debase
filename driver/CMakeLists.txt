@@ -15,7 +15,8 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
 target_link_libraries(${PROJECT_NAME} PUBLIC
   debase::llvm debase::rt debase::msvc-compat)
 if(WIN32)
-  target_compile_definitions(${PROJECT_NAME} PUBLIC _HAS_ITERATOR_DEBUGGING=0)
+  target_compile_definitions(${PROJECT_NAME} PUBLIC
+    _HAS_ITERATOR_DEBUGGING=0 _ALLOW_COMPILER_AND_STL_VERSION_MISMATCH=1)
 endif(WIN32)
 if(NOT DEBASE_MSVC_LIKE)
   target_compile_options(${PROJECT_NAME} PUBLIC
