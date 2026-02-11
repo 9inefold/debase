@@ -570,7 +570,7 @@ Error SymbolMatcher::loadSymbolsFromJSONFile(
   SmallString<80> ConfigFileReal = ConfigFile;
   if (auto EC = sys::fs::make_absolute(ConfigFileReal))
     return llvm::createFileError(ConfigFile, EC);
-  sys::path::make_preferred(ConfigFileReal, sys::path::Style::posix);
+  ConfigFileReal = sys::path::convert_to_slash(ConfigFileReal.str());
   // Load the config
   Expected<JSONLoaderHandler> JSON =
       JSONLoaderHandler::New(ConfigFileReal.str(), this, OutFiles);

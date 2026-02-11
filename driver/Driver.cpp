@@ -155,6 +155,11 @@ DumpModule("dump-module", cl::Hidden,
 // The following options were taken from llvm opt:
 static cl::OptionCategory& OptToolCategory = DebaseToolCategory;
 
+static cl::opt<bool>
+OutputSuccessfulFilenames("output-filenames",
+                          cl::desc("Output a list of the updated files"),
+                          cl::cat(OptToolCategory));
+
 //static constexpr bool OutputAssembly = true;
 static cl::opt<bool>
 OutputAssembly("output-assembly",
@@ -484,7 +489,7 @@ public:
       DeBaser::ResetInfo(F, PrevInfo);
   }
 
-  bool writeLLVM(const Twine& Dir);
+  ErrorOr<std::string> writeLLVM(const Twine& Dir);
 
   Triple getTriple() const {
     assert(M && "Module was not initialized!");
@@ -889,12 +894,12 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
   return true;
 }
 
-static ErrorOr<int> CreateToolOutputFile(StringRef OutPath) {
+static ErrorOr<int> CreateToolOutputFile(StringRef OutPath, bool IsText) {
   int ResultFD = -1;
   std::error_code EC = sys::fs::openFile(
     OutPath, ResultFD,
     sys::fs::CD_CreateAlways, sys::fs::FA_Write,
-    OutputAssembly ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None
+    IsText ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None
   );
   if (EC)
     return EC;
@@ -902,14 +907,18 @@ static ErrorOr<int> CreateToolOutputFile(StringRef OutPath) {
   return ResultFD;
 }
 
-bool DeBaser::writeLLVM(const Twine& Dir) {
+static ErrorOr<int> CreateToolOutputFile(StringRef OutPath) {
+  return CreateToolOutputFile(OutPath, OutputAssembly);
+}
+
+ErrorOr<std::string> DeBaser::writeLLVM(const Twine& Dir) {
   SmallString<80> OutPath;
   Dir.toVector(OutPath);
   sys::path::append(OutPath, sys::path::filename(LLFile));
   sys::path::replace_extension(OutPath, OutputAssembly ? ".ll" : ".bc");
   if (auto EC = sys::fs::make_absolute(OutPath)) {
     errs() << "For \"" << OutPath.str() << "\"" << EC.message() << '\n';
-    return false;
+    return EC;
   }
   sys::path::remove_dots(OutPath);
   // Open file
@@ -917,7 +926,7 @@ bool DeBaser::writeLLVM(const Twine& Dir) {
   if (auto EC = FDOrErr.getError()) {
     errs() << "While opening \"" << OutPath.str() << "\""
            << EC.message() << '\n';
-    return false;
+    return EC;
   }
   ToolOutputFile TheFile(OutPath.str(), *FDOrErr);
   auto& OS = TheFile.os();
@@ -935,10 +944,10 @@ bool DeBaser::writeLLVM(const Twine& Dir) {
   if (auto EC = OS.error()) {
     OS.clear_error();
     errs() << "While writing \"" << OutPath.str() << "\"" << EC.message() << '\n';
-    return false;
+    return EC;
   }
   TheFile.keep();
-  return true;
+  return TheFile.outputFilename();
 }
 
 int main(int Argc, char** Argv) {
@@ -1073,8 +1082,9 @@ int main(int Argc, char** Argv) {
     }
     return (*ExpectedTM)->createDataLayout().getStringRepresentation();
   };
-  // The pointer holding all the Modules output files.
-  std::unique_ptr<ToolOutputFile> Out;
+  
+  // Holds all the successful Modules output files.
+  std::unique_ptr<ToolOutputFile> JSONRecord;
   auto LoadToolOutputFile = [&](StringRef Filename) -> Error {
     using namespace std::literals;
     SmallString<128> Path;
@@ -1083,18 +1093,14 @@ int main(int Argc, char** Argv) {
       Path.append(sys::path::parent_path(Filename));
     else
       Path.append(OutputFilepath);
-    if (!Filename.consume_back(".ll"))
-      return MakeError("Invalid filename"s + Filename.str());
     StringRef Stem = sys::path::filename(Filename);
-    sys::path::append(Path, Twine(Stem) + ".out.ll");
+    sys::path::append(Path, Stem);
 
-    std::error_code EC;
-    sys::fs::OpenFlags Flags =
-        OutputAssembly ? sys::fs::OF_TextWithCRLF : sys::fs::OF_None;
-    Out.reset(new ToolOutputFile(Path.str(), EC, Flags));
-    if (EC)
+    ErrorOr<int> FDOrErr = ::CreateToolOutputFile(Path.str(), true);
+    if (auto EC = FDOrErr.getError())
       return errorCodeToError(EC);
     // Boss.
+    JSONRecord.reset(new ToolOutputFile(Path.str(), *FDOrErr));
     return Error::success();
   };
 
@@ -1199,6 +1205,25 @@ int main(int Argc, char** Argv) {
     return M;
   };
 
+  if (OutputSuccessfulFilenames) {
+    if (Error E = LoadToolOutputFile("out.json")) {
+      WithColor::error(errs())
+        << "Failed to generate output file list.\n";
+      return 1;
+    }
+    // Set up file!
+    assert(JSONRecord && "JSONRecord should be initialized!");
+    JSONRecord->os() << "{\n\"files\": [\n";
+  }
+
+  ListSeparator OutLS(",\n");
+  auto JSONRecordFilename = [&] (StringRef Filename) {
+    if (!JSONRecord)
+      return;
+    auto Path = sys::path::convert_to_slash(Filename);
+    JSONRecord->os() << OutLS << '\"' << Path << '\"';
+  };
+
   // CheckStuff();
   auto O1OptPasses = GetO1PassesRequiredForSimplification();
   DeBaser::Factory DBFactory(*SM, Argv[0], Context);
@@ -1247,14 +1272,23 @@ int main(int Argc, char** Argv) {
     // TODO: Run aggressive optimizer?
     // Write module
     if (!NoOutput) {
-      if (!DB->writeLLVM(OutputFilepath.getValue()))
+      auto OFOrErr = DB->writeLLVM(OutputFilepath.getValue());
+      if (!OFOrErr.getError())
+        JSONRecordFilename(*OFOrErr);
+      else
         WithColor::warning(errs()) << "Unable to write file.\n";
-    }
+    } else
+      JSONRecordFilename(Filename);
 
     if (Verbose) {
       outs().flush();
       errs() << '\n';
     }
+  }
+
+  if (JSONRecord) {
+    JSONRecord->os() << "\n]\n}";
+    JSONRecord->keep();
   }
 }
 
