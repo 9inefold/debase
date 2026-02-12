@@ -95,6 +95,7 @@ jobs:
         tar -xf clang+llvm.tar.xz --strip 1 -C llvm --wildcards   \
           '*/bin'                                                 \
           '*/include/llvm'                                        \
+          '*/include/llvm-c'                                      \
           '*/lib/*.lib'                                           \
           '*/lib/cmake/llvm/*'                                    \
           '*/lib/clang/*/include/*'                               \
