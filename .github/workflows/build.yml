@@ -67,30 +67,16 @@ jobs:
         #directory: ${{ github.workspace }}/llvm
         directory: ${{ runner.temp }}/llvm
 
-    # - name: Update LLVM (Windows)
-    #   shell: bash
-    #   run: |
-    #     curl -L https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/LLVM-19.1.7-win64.exe -o llvm-inst.exe
-    #     7z x llvm-inst.exe -ollvm bin/clang.exe bin/clang++.exe bin/lld-link.exe bin/llvm-rc.exe bin/*.dll lib/clang/*/include/*
-    #     echo "$GITHUB_WORKSPACE/llvm/bin" >> $GITHUB_PATH
-    #   if: matrix.config.id == 'win'
-
-    # - name: Update Clang (Linux)
-    #   shell: bash
-    #   run: |
-    #     sudo apt update
-    #     sudo apt remove clang-14
-    #     sudo apt install gcc-12 g++-12
-    #     sudo ln -sf /usr/bin/gcc-12 /usr/bin/clang
-    #     sudo ln -sf /usr/bin/g++-12 /usr/bin/clang++
-    #   if: matrix.config.id == 'linux'
+    - name: Add Clang to PATH
+      run: |
+        echo "${{ env.LLVM_PATH }}/bin" >> $GITHUB_PATH
 
     - name: Configure
       run: >
         cmake . -B build
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_C_COMPILER=${{ env.LLVM_PATH }}/bin/clang
-        -DCMAKE_CXX_COMPILER=${{ env.LLVM_PATH }}/bin/clang++
+        -DCMAKE_C_COMPILER=clang
+        -DCMAKE_CXX_COMPILER=clang++
         -G Ninja
         ${{ matrix.config.extra_flags }}
 
