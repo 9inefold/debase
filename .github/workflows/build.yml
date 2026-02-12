@@ -21,7 +21,8 @@ jobs:
           id: win
           llvm_version: '19.1.0'
           llvm_arch: x64
-          extra_flags: ''
+          extra_flags: >
+            -DLLVM_DIR='${{ github.workspace }}\llvm\lib\cmake'
         
       #  - name: macOS
       #    os: macos-latest
