@@ -1,6 +1,7 @@
 include_guard(DIRECTORY)
 
 if(DEBASE_MSVC_LIKE)
+  message(STATUS "Building debase with libcpmt compatibility")
   add_library(debase-msvc-compat STATIC vector_algorithms.cpp)
   if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     target_compile_options(debase-msvc-compat PRIVATE

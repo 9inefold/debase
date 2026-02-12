@@ -158,6 +158,8 @@ StringRef debase_tool::get_triple_subarch(const llvm::Triple& T) {
     return "SPIRVSubArch_v16";
   case Triple::SubArchType::NoSubArch:
     return "NoSubArch";
+  default:
+    return "Unknown";
   }
 
   llvm_unreachable("invalid subarch!");

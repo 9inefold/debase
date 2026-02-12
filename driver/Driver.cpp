@@ -856,7 +856,7 @@ bool DeBaser::loadAndUpdateRefsFromModule() {
     if (!SM.match(FFeats))
       continue;
     // Check if this is an inline function
-    if (Comdat* C = F.getComdat()) {
+    if (F.hasComdat()) {
       WithColor::note(vbss())
         << "Skipping " << F.getName() << ", has comdat tag.\n";
       continue;

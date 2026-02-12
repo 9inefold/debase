@@ -26,6 +26,10 @@ if(NOT DEBASE_MSVC_LIKE)
   #target_link_options(${PROJECT_NAME} PUBLIC -fsanitize=address)
 endif()
 
+if(DEBASE_VERBOSE_LINKER)
+  target_link_options(${PROJECT_NAME} PUBLIC -v)
+endif()
+
 foreach(target IN LISTS DEBASE_TARGETS)
   set(DEBASE_TARGETS_X "${DEBASE_TARGETS_X} X(${target})") 
 endforeach()

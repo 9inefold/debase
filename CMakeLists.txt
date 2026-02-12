@@ -25,6 +25,7 @@ include(SetOptions)
 include(cmake/CPM.cmake)
 
 option(DEBASE_RUNTIME_ONLY "Only add the debase runtime." OFF)
+option(DEBASE_VERBOSE_LINKER "Run linker with '-v'." OFF)
 option(DEBASE_TESTS "Run tests." OFF)
 valued_option(DEBASE_VENDOR_NAME "Name used in --version." "Debaser")
 
