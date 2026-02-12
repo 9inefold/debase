@@ -11,6 +11,9 @@ CPMAddPackage(
 )
 
 find_package(ZLIB REQUIRED)
+if(NOT TARGET ZLIB::ZLIB)
+  add_library(ZLIB::ZLIB ALIAS zlibstatic)
+endif()
 if(NOT TARGET ZLIB::ZLIBSTATIC)
   add_library(ZLIB::ZLIBSTATIC ALIAS zlibstatic)
 endif()
