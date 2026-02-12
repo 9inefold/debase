@@ -1,4 +1,4 @@
-name: Build Codegen
+name: Build Debase
 
 on:
   push:
