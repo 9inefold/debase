@@ -31,11 +31,13 @@ foreach(target IN LISTS DEBASE_TARGETS)
 endforeach()
 configure_inline(LLVMTargets.hpp.in @ONLY)
 
-add_custom_target(move-zlib ALL)
-add_custom_command(
-  TARGET move-zlib
-  COMMAND ${CMAKE_COMMAND}
-    -E copy "$<TARGET_FILE:zlib>" "${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:zlib>"
-  POST_BUILD
-)
-add_dependencies(${PROJECT_NAME} move-zlib)
+#add_custom_target(move-zlib ALL)
+#add_custom_command(
+#  TARGET move-zlib
+#  COMMAND ${CMAKE_COMMAND}
+#    -E copy "$<TARGET_FILE:zlib>" "${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:zlib>"
+#  POST_BUILD
+#)
+#add_dependencies(${PROJECT_NAME} move-zlib)
+
+target_link_libraries(${PROJECT_NAME} PUBLIC ZLIB::ZLIBSTATIC)

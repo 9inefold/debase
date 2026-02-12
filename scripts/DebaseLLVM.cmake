@@ -5,11 +5,14 @@ CPMAddPackage(
   URL  https://github.com/madler/zlib/releases/download/v1.3.1/zlib131.zip
   OPTIONS
     "ZLIB_BUILD_TESTING OFF"
+    "ZLIB_BUILD_SHARED OFF"
+    "ZLIB_BUILD_STATIC ON"
+    "ZLIB_INSTALL ON"
 )
 
 find_package(ZLIB REQUIRED)
-if(NOT TARGET ZLIB::ZLIB)
-  add_library(ZLIB::ZLIB ALIAS zlib)
+if(NOT TARGET ZLIB::ZLIBSTATIC)
+  add_library(ZLIB::ZLIBSTATIC ALIAS zlibstatic)
 endif()
 
 find_package(LLVM REQUIRED CONFIG)
