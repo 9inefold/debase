@@ -96,6 +96,8 @@ jobs:
         -DCMAKE_C_COMPILER=clang
         -DCMAKE_CXX_COMPILER=clang++
         -DCMAKE_LINKER_TYPE=LLD
+        -DLLVM_DIR=${{ env.LLVM_DIR }}
+        -DCMAKE_PREFIX_PATH=${{ env.LLVM_DIR }}
         -DDUMP_LIBS=ON
         -DDEBASE_VERBOSE_LINKER=ON
         -DDEBASE_TESTS=OFF
