@@ -1,16 +1,14 @@
 name: Build Codegen
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/build.yml'
-      - 'driver/**'
   push:
     branches:
-    - '**'
+    - 'main'
     paths:
       - '.github/workflows/build.yml'
+      - 'CMakeLists.txt'
       - 'driver/**'
+      - 'scripts/**'
 
 jobs:
   build:
@@ -89,7 +87,7 @@ jobs:
 
     - name: Configure
       run: >
-        cmake debase -B debase/build
+        cmake . -B build
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_C_COMPILER=${{ env.LLVM_PATH }}/bin/clang
         -DCMAKE_CXX_COMPILER=${{ env.LLVM_PATH }}/bin/clang++
@@ -97,15 +95,15 @@ jobs:
         ${{ matrix.config.extra_flags }}
 
     - name: Build
-      run: cmake --build debase/build --config Release --parallel
+      run: cmake --build build --config Release --parallel
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: debase-${{ matrix.config.id }}
         path: |
-          debase/build/driver/debase
-          debase/build/driver/debase.exe
+          build/driver/debase
+          build/driver/debase.exe
         if-no-files-found: ignore
 
   publish:
