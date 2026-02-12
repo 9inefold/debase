@@ -92,7 +92,7 @@ jobs:
         curl -fL --retry 3 --max-time 300 -o clang+llvm.tar.xz \
           https://github.com/llvm/llvm-project/releases/download/llvmorg-${{env.LLVM_VERSION}}/clang+llvm-${{env.LLVM_VERSION}}-x86_64-pc-windows-msvc.tar.xz
         mkdir llvm
-        tar -xf clang+llvm.tar.xz --strip 1 -C llvm --wildcards \
+        tar -xf clang+llvm.tar.xz --strip 1 -C llvm --wildcards   \
           '*/bin/clang.exe'                                       \
           '*/bin/clang++.exe'                                     \
           '*/bin/lld-link.exe'                                    \
@@ -103,6 +103,7 @@ jobs:
           '*/lib/clang/*/include/*'                               \
           '*/lib/clang/*/lib/windows/*'
         rm clang+llvm.tar.xz
+        ls llvm/lib/cmake/llvm
         echo "$GITHUB_WORKSPACE/llvm/bin" >> $GITHUB_PATH
       #with:
       #  version: ${{ matrix.llvm_version || env.LLVM_VERSION }}
