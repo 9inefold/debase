@@ -102,6 +102,7 @@ jobs:
         # ls llvm/lib/cmake/llvm
         find llvm/lib/cmake/llvm -type f -exec \
           sed -i -E 's|C:/Program Files/Microsoft Visual Studio/[0-9]+/[^/]+/DIA SDK/lib/amd64/diaguids.lib;||g' {} \;
+        grep -rn 'llvm' -e 'diaguids'
         echo "$GITHUB_WORKSPACE/llvm/bin" >> $GITHUB_PATH
       #with:
       #  version: ${{ matrix.llvm_version || env.LLVM_VERSION }}
