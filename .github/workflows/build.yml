@@ -99,11 +99,7 @@ jobs:
           '*/lib/clang/*/include/*'                               \
           '*/lib/clang/*/lib/windows/*'
         rm clang+llvm.tar.xz
-        # ls llvm/lib/cmake/llvm
-        # find llvm/lib/cmake/llvm -type f -exec \
-        #   sed -i -E 's|C:/Program Files/Microsoft Visual Studio/[0-9]+/[^/]+/DIA SDK/lib/amd64/diaguids.lib;||g' {} \\;
         sed -i -E 's|C:/Program Files[^/]*/Microsoft Visual Studio/[0-9]+/[^/]+/DIA SDK/lib/amd64/diaguids.lib;||g' llvm/lib/cmake/llvm/LLVMExports.cmake
-        grep -rn 'llvm/lib/cmake/llvm' -e 'diaguids'
         echo "$GITHUB_WORKSPACE/llvm/bin" >> $GITHUB_PATH
       #with:
       #  version: ${{ matrix.llvm_version || env.LLVM_VERSION }}
