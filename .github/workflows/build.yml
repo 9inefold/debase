@@ -10,39 +10,39 @@ on:
       - 'driver/**'
       - 'scripts/**'
 
+env:
+  LLVM_VERSION: 19.1.0
+
 jobs:
   build:
     strategy:
       fail-fast: false
       matrix:
-        config:
-        # - name: Windows
-        #   os: windows-latest
-        #   id: win
-        #   llvm_version: '19.1.0'
-        #   llvm_arch: x64
-        #   extra_flags: ''
+        include:
+        - name: Windows
+          os: windows-latest
+          id: win
+          llvm_arch: x64
+          extra_flags: ''
         
-        - name: macOS
-          os: macos-latest
-          id: mac
-          llvm_version: '19.1.0'
-          llvm_arch: arm64
-          extra_flags: >
-            -DCMAKE_OSX_ARCHITECTURES='arm64'
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
-            -DCMAKE_AR='/usr/bin/ar'
-            -DCMAKE_RANLIB='/usr/bin/ranlib'
+        # - name: macOS
+        #   os: macos-latest
+        #   id: mac
+        #   llvm_arch: arm64
+        #   extra_flags: >
+        #     -DCMAKE_OSX_ARCHITECTURES='arm64'
+        #     -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+        #     -DCMAKE_AR='/usr/bin/ar'
+        #     -DCMAKE_RANLIB='/usr/bin/ranlib'
 
         #  - name: Linux
         #    os: ubuntu-22.04
         #    id: linux
-        #    llvm_version: '19.1.0'
         #    llvm_arch: x64
         #    extra_flags: ''
 
-    name: Build ${{ matrix.config.name }}
-    runs-on: ${{ matrix.config.os }}
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
 
     env:
       CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm-cache
@@ -58,38 +58,64 @@ jobs:
       uses: actions/cache@v4
       with:
         path: cpm-cache
-        key: cpm-${{ matrix.config.id }}-v1-${{ hashFiles('driver/CMakeLists.txt') }}
+        key: cpm-${{ matrix.id }}-v1-${{ hashFiles('driver/CMakeLists.txt') }}
         restore-keys: |
-          cpm-${{ matrix.config.id }}-v1-
+          cpm-${{ matrix.id }}-v1-
 
     - name: Install Ninja
       shell: bash
       run: |
-        curl -L https://github.com/ninja-build/ninja/releases/latest/download/ninja-${{ matrix.config.id }}.zip -o ninja.zip
+        curl -L https://github.com/ninja-build/ninja/releases/latest/download/ninja-${{ matrix.id }}.zip -o ninja.zip
         7z x ninja.zip -o"$GITHUB_WORKSPACE/ninja"
         echo "$GITHUB_WORKSPACE/ninja" >> $GITHUB_PATH
     
-    - name: Cache LLVM
-      id: cache-llvm
-      uses: actions/cache@v4
-      with:
-        path: llvm
-        key: ${{ matrix.config.id }}-llvm-${{ matrix.config.llvm_version }}
+    #- name: Cache LLVM
+    #  id: cache-llvm
+    #  uses: actions/cache@v4
+    #  with:
+    #    path: llvm
+    #    key: ${{ matrix.config.id }}-llvm-${{ matrix.config.llvm_version }}
 
     - name: Install LLVM
-      if: steps.cache-llvm.outputs.cache-hit != 'true'
+      if: matrix.id != 'win'
       uses: KyleMayes/install-llvm-action@v2
       with:
-        version: ${{ matrix.config.llvm_version }}
+        version: ${{ matrix.llvm_version || env.LLVM_VERSION }}
         directory: llvm
-        arch: ${{ matrix.config.llvm_arch }}
-
-    # Can maybe remove this
-    - name: Add Clang to PATH
-      id: clang-info
+        arch: ${{ matrix.llvm_arch }}
+    
+    - name: Install LLVM (windows)
+      if: matrix.id == 'win'
       shell: bash
       run: |
-        echo "llvm/bin" >> $GITHUB_PATH
+        set -eux
+        curl -fL --retry 3 --max-time 300 -o clang+llvm.tar.xz \
+          https://github.com/llvm/llvm-project/releases/download/llvmorg-${{env.LLVM_VERSION}}/clang+llvm-${{env.LLVM_VERSION}}-x86_64-pc-windows-msvc.tar.xz
+        mkdir llvm
+        tar -xf clang+llvm.tar.xz --strip 1 -C llvm \
+          '*/bin/clang.exe'                         \
+          '*/bin/clang++.exe'                       \
+          '*/bin/lld-link.exe'                      \
+          '*/bin/llvm-rc.exe'                       \
+          '*/bin/*.dll'                             \
+          '*/lib/*.lib'                             \
+          '*/lib/cmake/llvm/*'                      \
+          '*/lib/clang/*/include/*'                 \
+          '*/lib/clang/*/lib/windows/*'
+        rm clang+llvm.tar.xz
+        echo "$GITHUB_WORKSPACE/llvm/bin" >> $GITHUB_PATH
+      #with:
+      #  version: ${{ matrix.llvm_version || env.LLVM_VERSION }}
+      #  directory: llvm
+      #  arch: ${{ matrix.llvm_arch }}
+
+    # Can maybe remove this
+    #- name: Add Clang to PATH
+    #  id: clang-info
+    #  shell: bash
+    #  run: |
+    #    set -eux
+    #    echo "llvm/bin" >> $GITHUB_PATH
 
     - name: Configure
       run: >
@@ -103,7 +129,7 @@ jobs:
         -DDEBASE_VERBOSE_LINKER=ON
         -DDEBASE_TESTS=OFF
         -G Ninja
-        ${{ matrix.config.extra_flags }}
+        ${{ matrix.extra_flags }}
 
     - name: Build
       run: cmake --build build --config Release --parallel
@@ -111,7 +137,7 @@ jobs:
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: debase-${{ matrix.config.id }}
+        name: debase-${{ matrix.id }}
         path: |
           build/driver/debase
           build/driver/debase.exe
