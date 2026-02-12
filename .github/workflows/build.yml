@@ -87,9 +87,10 @@ jobs:
     # Can maybe remove this
     - name: Add Clang to PATH
       id: clang-info
+      shell: bash
       run: |
         echo "llvm/bin" >> $GITHUB_PATH
-        echo "llvm-cmakedir=$(llvm-config --cmakedir)" >> $GITHUB_OUTPUT
+        echo "llvm-cmakedir=$(llvm/bin/llvm-config --cmakedir)" >> $GITHUB_OUTPUT
 
     - name: Configure
       run: >
