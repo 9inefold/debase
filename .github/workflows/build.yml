@@ -21,8 +21,7 @@ jobs:
           id: win
           llvm_version: '19.1.0'
           llvm_arch: x64
-          extra_flags: >
-            -DLLVM_DIR='${{ github.workspace }}\llvm\lib\cmake'
+          extra_flags: ''
         
       #  - name: macOS
       #    os: macos-latest
@@ -47,6 +46,7 @@ jobs:
 
     env:
       CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm-cache
+      LLVM_DIR: ${{ github.workspace }}/llvm/lib/cmake
 
     steps:
     - name: Checkout
