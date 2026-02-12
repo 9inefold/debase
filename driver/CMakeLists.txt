@@ -9,7 +9,7 @@ add_executable(${PROJECT_NAME}
   Pattern.cpp
   SymbolMatcher.cpp
   Triple.cpp
-  UnlinkRefs.cpp
+  #UnlinkRefs.cpp
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
 target_link_libraries(${PROJECT_NAME} PUBLIC
@@ -21,6 +21,7 @@ endif(WIN32)
 if(NOT DEBASE_MSVC_LIKE)
   target_compile_options(${PROJECT_NAME} PUBLIC
     -Wall -Wno-unused-private-field -Wno-unused-function -Wno-unused-variable
+    -fno-exceptions -funwind-tables
     #-fsanitize=address
   )
   #target_link_options(${PROJECT_NAME} PUBLIC -fsanitize=address)
