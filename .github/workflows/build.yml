@@ -142,37 +142,37 @@ jobs:
           build/driver/debase.exe
         if-no-files-found: ignore
 
-  # publish:
-  #   name: Publish
-  #   runs-on: ubuntu-latest
-  #   needs: build
-  #   if: github.ref == 'refs/heads/main'
-  #   steps:
-  #   - name: Checkout
-  #     uses: actions/checkout@v4
-  # 
-  #   - name: Download Artifacts
-  #     uses: actions/download-artifact@v4
-  # 
-  #   - name: Move Binaries
-  #     run: |
-  #       mv debase-win/debase.exe debase-win.exe
-  #       mv debase-mac/debase     debase-mac-temp
-  #       mv debase-linux/debase   debase-linux-temp
-  #       rmdir debase-mac
-  #       rmdir debase-linux
-  #       mv debase-mac-temp    debase-mac
-  #       mv debase-linux-temp  debase-linux
-  # 
-  #   - name: Update Debase Release
-  #     uses: andelf/nightly-release@main
-  #     env:
-  #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #     with:
-  #       tag_name: debase
-  #       name: 'Debase Release'
-  #       body: Debase release for commit ${{ github.sha }}.
-  #       files: |
-  #         ./debase-win.exe
-  #         ./debase-mac
-  #         ./debase-linux
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+  
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+  
+    - name: Move Binaries
+      run: |
+        mv debase-win/debase.exe debase-win.exe
+      #  mv debase-mac/debase     debase-mac-temp
+      #  mv debase-linux/debase   debase-linux-temp
+      #  rmdir debase-mac
+      #  rmdir debase-linux
+      #  mv debase-mac-temp    debase-mac
+      #  mv debase-linux-temp  debase-linux
+  
+    - name: Update Debase Release
+      uses: andelf/nightly-release@main
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: debase
+        name: 'Debase Release'
+        body: Debase release for commit ${{ github.sha }}.
+        files: |
+          ./debase-win.exe
+        #  ./debase-mac
+        #  ./debase-linux
