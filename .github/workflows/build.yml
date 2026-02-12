@@ -94,6 +94,7 @@ jobs:
         mkdir llvm
         tar -xf clang+llvm.tar.xz --strip 1 -C llvm --wildcards   \
           '*/bin'                                                 \
+          '*/include/llvm'                                        \
           '*/lib/*.lib'                                           \
           '*/lib/cmake/llvm/*'                                    \
           '*/lib/clang/*/include/*'                               \
