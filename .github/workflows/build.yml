@@ -16,37 +16,37 @@ jobs:
       fail-fast: false
       matrix:
         config:
-        - name: Windows
-          os: windows-latest
-          id: win
-          llvm_version: '19.1.0'
-          llvm_arch: x64
-          extra_flags: ''
+        # - name: Windows
+        #   os: windows-latest
+        #   id: win
+        #   llvm_version: '19.1.0'
+        #   llvm_arch: x64
+        #   extra_flags: ''
         
-      #  - name: macOS
-      #    os: macos-latest
-      #    id: mac
-      #    llvm_version: '19.1.0'
-      #    llvm_arch: arm64
-      #    extra_flags: >
-      #      -DCMAKE_OSX_ARCHITECTURES='arm64'
-      #      -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
-      #      -DCMAKE_AR='/usr/bin/ar'
-      #      -DCMAKE_RANLIB='/usr/bin/ranlib'
-      #  
-      #  - name: Linux
-      #    os: ubuntu-22.04
-      #    id: linux
-      #    llvm_version: '19.1.0'
-      #    llvm_arch: x64
-      #    extra_flags: ''
+        - name: macOS
+          os: macos-latest
+          id: mac
+          llvm_version: '19.1.0'
+          llvm_arch: arm64
+          extra_flags: >
+            -DCMAKE_OSX_ARCHITECTURES='arm64'
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+            -DCMAKE_AR='/usr/bin/ar'
+            -DCMAKE_RANLIB='/usr/bin/ranlib'
+
+        #  - name: Linux
+        #    os: ubuntu-22.04
+        #    id: linux
+        #    llvm_version: '19.1.0'
+        #    llvm_arch: x64
+        #    extra_flags: ''
 
     name: Build ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
 
     env:
       CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm-cache
-      #LLVM_DIR: ${{ github.workspace }}/llvm/lib/cmake
+      LLVM_DIR: ${{ github.workspace }}/llvm/lib/cmake
 
     steps:
     - name: Checkout
@@ -74,14 +74,14 @@ jobs:
       uses: actions/cache@v4
       with:
         path: llvm
-        key: ${{ runner.os }}-llvm-${{ matrix.config.llvm_version }}
+        key: ${{ matrix.config.id }}-llvm-${{ matrix.config.llvm_version }}
 
     - name: Install LLVM
       if: steps.cache-llvm.outputs.cache-hit != 'true'
       uses: KyleMayes/install-llvm-action@v2
       with:
         version: ${{ matrix.config.llvm_version }}
-        directory: ${{ github.workspace }}/llvm
+        directory: llvm
         arch: ${{ matrix.config.llvm_arch }}
 
     # Can maybe remove this
@@ -90,7 +90,6 @@ jobs:
       shell: bash
       run: |
         echo "llvm/bin" >> $GITHUB_PATH
-        echo "llvm-cmakedir=$(llvm/bin/llvm-config --cmakedir)" >> $GITHUB_OUTPUT
 
     - name: Configure
       run: >
@@ -99,8 +98,7 @@ jobs:
         -DCMAKE_C_COMPILER=clang
         -DCMAKE_CXX_COMPILER=clang++
         -DCMAKE_LINKER_TYPE=LLD
-        -DLLVM_DIR=${{ steps.clang-info.outputs.llvm-cmakedir }}
-        -DCMAKE_PREFIX_PATH=${{ steps.clang-info.outputs.llvm-cmakedir }}
+        -DLLVM_DIR=${{ env.LLVM_DIR }}
         -DDUMP_LIBS=ON
         -DDEBASE_VERBOSE_LINKER=ON
         -DDEBASE_TESTS=OFF
