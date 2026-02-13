@@ -35,6 +35,7 @@ endif()
 #endif(WIN32)
 
 find_package(LLVM REQUIRED CONFIG)
+debase_set_binary(DEBASE_LLC "${LLVM_TOOLS_BINARY_DIR}/llc")
 separate_arguments(LLVM_DEFS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 llvm_map_components_to_libnames(llvm_libs
   ${DEBASE_TARGETS} #${llvm_components}

@@ -56,7 +56,7 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++
             -DDEBASE_VERBOSE_LINKER=ON
             -DDUMP_LIBS=ON
-          build_flags: --parallel
+          build_flags: ''
 
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -138,6 +138,8 @@ jobs:
         path: |
           build/driver/debase
           build/driver/debase.exe
+          llvm/bin/llc
+          llvm/bin/llc.exe
         if-no-files-found: ignore
 
   publish:
@@ -155,12 +157,17 @@ jobs:
     - name: Move Binaries
       run: |
         mv debase-win/debase.exe debase-win.exe
-        mv debase-mac/debase     debase-mac-temp
-        mv debase-linux/debase   debase-linux-temp
+        mv debase-win/llc.exe    llc-win.exe
+
+        mv debase-mac/debase debase-mac-temp
+        mv debase-mac/llc    llc-mac
         rmdir debase-mac
+        mv debase-mac-temp debase-mac
+
+        mv debase-linux/debase debase-linux-temp
+        mv debase-linux/llc    llc-linux
         rmdir debase-linux
-        mv debase-mac-temp    debase-mac
-        mv debase-linux-temp  debase-linux
+        mv debase-linux-temp debase-linux
   
     - name: Update Debase Release
       uses: andelf/nightly-release@main
@@ -168,9 +175,15 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: debase
-        name: 'Debase Release'
-        body: Debase release for commit ${{ github.sha }}.
+        name: 'Debase for LLVM ${{ env.LLVM_VERSION }}'
+        body: |
+          Debase release for commit ${{ github.sha }}.
+          Contains debase and llc for Windows, macOS, and Linux.
+          llc is licenced under the [Apache License v2.0 with LLVM Exceptions](https://llvm.org/LICENSE.txt).
         files: |
           ./debase-win.exe
           ./debase-mac
           ./debase-linux
+          ./llc-win.exe
+          ./llc-mac
+          ./llc-linux
