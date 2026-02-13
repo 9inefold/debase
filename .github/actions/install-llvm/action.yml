@@ -20,10 +20,9 @@ runs:
         directory: llvm
         arch: ${{ inputs.llvm_arch }}
         cached: ${{ inputs.cached }}
-    
+
     - name: Install LLVM (windows)
-      #if: ${{ inputs.cached != 'true' && inputs.matrix_id == 'win' }}
-      if: ${{ inputs.matrix_id == 'win' }}
+      if: ${{ inputs.cached != 'true' && inputs.matrix_id == 'win' }}
       shell: bash
       run: |
         set -eux
