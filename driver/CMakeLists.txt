@@ -21,7 +21,7 @@ endif(WIN32)
 if(NOT DEBASE_MSVC_LIKE)
   target_compile_options(${PROJECT_NAME} PUBLIC
     -Wall -Wno-unused-private-field -Wno-unused-function -Wno-unused-variable
-    -fno-exceptions -funwind-tables
+    -fno-exceptions -fno-rtti -funwind-tables
     #-fsanitize=address
   )
   #target_link_options(${PROJECT_NAME} PUBLIC -fsanitize=address)

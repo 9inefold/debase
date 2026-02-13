@@ -1,0 +1,25 @@
+name: Install act dependencies
+description: Installs act dependencies
+inputs:
+  matrix_id:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Install act dependencies (linux)
+      if: ${{ inputs.matrix_id == 'linux' }}
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install p7zip p7zip-full -y
+
+        pip install cmake --upgrade
+        cmake --version
+    
+    #- name: Install act dependencies (mac)
+    #  if: ${{ inputs.matrix_id == 'mac' }}
+    #  shell: bash
+    #  run: |
+    #    7z
+    #    cmake --version
+    

@@ -6,9 +6,7 @@ on:
     - 'main'
     paths:
       - '.github/workflows/build.yml'
-      - 'CMakeLists.txt'
       - 'driver/**'
-      - 'scripts/**'
 
 env:
   LLVM_VERSION: 19.1.0
@@ -23,23 +21,40 @@ jobs:
           os: windows-latest
           id: win
           llvm_arch: x64
+          base_flags: >-
+            -DCMAKE_C_COMPILER=clang
+            -DCMAKE_CXX_COMPILER=clang++
           extra_flags: ''
+          build_flags: --parallel
         
-        # - name: macOS
-        #   os: macos-latest
-        #   id: mac
-        #   llvm_arch: arm64
-        #   extra_flags: >
-        #     -DCMAKE_OSX_ARCHITECTURES='arm64'
-        #     -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
-        #     -DCMAKE_AR='/usr/bin/ar'
-        #     -DCMAKE_RANLIB='/usr/bin/ranlib'
+        - name: macOS
+          os: macos-latest
+          id: mac
+          llvm_arch: arm64
+          base_flags: >-
+            -DCMAKE_C_COMPILER=clang
+            -DCMAKE_CXX_COMPILER=clang++
+          extra_flags: >-
+            -DCMAKE_OSX_ARCHITECTURES='arm64'
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+            -DCMAKE_AR='/usr/bin/ar'
+            -DCMAKE_RANLIB='/usr/bin/ranlib'
+            -DDEBASE_VERBOSE_LINKER=ON
+            -DDUMP_LIBS=ON
+          build_flags: ''
 
-        #  - name: Linux
-        #    os: ubuntu-22.04
-        #    id: linux
-        #    llvm_arch: x64
-        #    extra_flags: ''
+        - name: Linux
+          os: ubuntu-22.04
+          id: linux
+          llvm_arch: x64
+          base_flags: >-
+            -DCMAKE_C_COMPILER=clang
+            -DCMAKE_CXX_COMPILER=clang++
+          extra_flags: >-
+            -DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++
+            -DDEBASE_VERBOSE_LINKER=ON
+            -DDUMP_LIBS=ON
+          build_flags: --parallel
 
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -58,82 +73,63 @@ jobs:
       uses: actions/cache@v4
       with:
         path: cpm-cache
-        key: cpm-${{ matrix.id }}-v1-${{ hashFiles('driver/CMakeLists.txt') }}
+        key: cpm-${{ matrix.id }}-${{ hashFiles('scripts/DebaseLLVM.cmake') }}
         restore-keys: |
-          cpm-${{ matrix.id }}-v1-
+          cpm-${{ matrix.id }}-
+
+    - name: Install dependencies (act)
+      if: ${{ env.ACT }}
+      uses: ./.github/actions/install-act-deps
+      with:
+        matrix_id: ${{ matrix.id }}
 
     - name: Install Ninja
       shell: bash
       run: |
         curl -L https://github.com/ninja-build/ninja/releases/latest/download/ninja-${{ matrix.id }}.zip -o ninja.zip
-        7z x ninja.zip -o"$GITHUB_WORKSPACE/ninja"
+        7z x -y ninja.zip -o"$GITHUB_WORKSPACE/ninja"
         echo "$GITHUB_WORKSPACE/ninja" >> $GITHUB_PATH
     
-    #- name: Cache LLVM
-    #  id: cache-llvm
-    #  uses: actions/cache@v4
-    #  with:
-    #    path: llvm
-    #    key: ${{ matrix.config.id }}-llvm-${{ matrix.config.llvm_version }}
+    - name: Restore cached LLVM
+      id: cache-llvm-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: llvm
+        key: ${{ matrix.id }}-llvm-${{ env.LLVM_VERSION }}
 
     - name: Install LLVM
-      if: matrix.id != 'win'
-      uses: KyleMayes/install-llvm-action@v2
+      uses: ./.github/actions/install-llvm
       with:
-        version: ${{ matrix.llvm_version || env.LLVM_VERSION }}
-        directory: llvm
-        arch: ${{ matrix.llvm_arch }}
-    
-    - name: Install LLVM (windows)
-      if: matrix.id == 'win'
-      shell: bash
-      run: |
-        set -eux
-        curl -fL --retry 3 --max-time 300 -o clang+llvm.tar.xz \
-          https://github.com/llvm/llvm-project/releases/download/llvmorg-${{env.LLVM_VERSION}}/clang+llvm-${{env.LLVM_VERSION}}-x86_64-pc-windows-msvc.tar.xz
-        mkdir llvm
-        tar -xf clang+llvm.tar.xz --strip 1 -C llvm --wildcards   \
-          '*/bin'                                                 \
-          '*/include/llvm'                                        \
-          '*/include/llvm-c'                                      \
-          '*/lib/*.lib'                                           \
-          '*/lib/cmake/llvm/*'                                    \
-          '*/lib/clang/*/include/*'                               \
-          '*/lib/clang/*/lib/windows/*'
-        rm clang+llvm.tar.xz
-        sed -i -E 's|C:/Program Files[^/]*/Microsoft Visual Studio/[0-9]+/[^/]+/DIA SDK/lib/amd64/diaguids.lib;||g' llvm/lib/cmake/llvm/LLVMExports.cmake
-        echo "$GITHUB_WORKSPACE/llvm/bin" >> $GITHUB_PATH
-      #with:
-      #  version: ${{ matrix.llvm_version || env.LLVM_VERSION }}
-      #  directory: llvm
-      #  arch: ${{ matrix.llvm_arch }}
+        matrix_id: ${{ matrix.id }}
+        llvm_version: ${{ matrix.llvm_version || env.LLVM_VERSION }}
+        llvm_arch: ${{ matrix.llvm_arch }}
+        cached: ${{ steps.cache-llvm-restore.outputs.cache-hit == 'true' }}
 
-    # Can maybe remove this
-    #- name: Add Clang to PATH
-    #  id: clang-info
-    #  shell: bash
-    #  run: |
-    #    set -eux
-    #    echo "llvm/bin" >> $GITHUB_PATH
+    - name: Save cached LLVM
+      # LLVM is fucking massive, only save it locally
+      if: ${{ env.ACT }}
+      id: cache-llvm-save
+      uses: actions/cache/save@v4
+      with:
+        path: llvm
+        key: ${{ steps.cache-llvm-restore.outputs.cache-primary-key }}
 
     - name: Configure
       run: >
         cmake . -B build
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_C_COMPILER=clang
-        -DCMAKE_CXX_COMPILER=clang++
+        ${{ matrix.base_flags }}
         -DCMAKE_LINKER_TYPE=LLD
         -DLLVM_DIR=${{ env.LLVM_DIR }}
-        -DDUMP_LIBS=ON
-        -DDEBASE_VERBOSE_LINKER=ON
         -DDEBASE_TESTS=OFF
         -G Ninja
         ${{ matrix.extra_flags }}
 
     - name: Build
-      run: cmake --build build --config Release --parallel
+      run: cmake --build build --config Release ${{ matrix.build_flags }}
 
     - name: Upload Artifacts
+      if: ${{ !env.ACT }}
       uses: actions/upload-artifact@v4
       with:
         name: debase-${{ matrix.id }}
@@ -146,7 +142,7 @@ jobs:
     name: Publish
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: ${{ !github.event.act && github.ref == 'refs/heads/main' }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -157,12 +153,12 @@ jobs:
     - name: Move Binaries
       run: |
         mv debase-win/debase.exe debase-win.exe
-      #  mv debase-mac/debase     debase-mac-temp
-      #  mv debase-linux/debase   debase-linux-temp
-      #  rmdir debase-mac
-      #  rmdir debase-linux
-      #  mv debase-mac-temp    debase-mac
-      #  mv debase-linux-temp  debase-linux
+        mv debase-mac/debase     debase-mac-temp
+        mv debase-linux/debase   debase-linux-temp
+        rmdir debase-mac
+        rmdir debase-linux
+        mv debase-mac-temp    debase-mac
+        mv debase-linux-temp  debase-linux
   
     - name: Update Debase Release
       uses: andelf/nightly-release@main
@@ -174,5 +170,5 @@ jobs:
         body: Debase release for commit ${{ github.sha }}.
         files: |
           ./debase-win.exe
-        #  ./debase-mac
-        #  ./debase-linux
+          ./debase-mac
+          ./debase-linux

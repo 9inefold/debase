@@ -14,5 +14,8 @@ build
 **/*.inc
 **/*.hidden.*
 
+.env
+.env.test
+
 runtime/debase/Config.hpp
 driver/LLVMTargets.hpp
