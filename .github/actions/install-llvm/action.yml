@@ -22,7 +22,7 @@ runs:
         cached: ${{ inputs.cached }}
     
     - name: Install LLVM (windows)
-      if: ${{ !inputs.cached && inputs.matrix_id == 'win' }}
+      if: ${{ inputs.cached != 'true' && inputs.matrix_id == 'win' }}
       shell: bash
       run: |
         set -eux
