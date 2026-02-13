@@ -132,6 +132,8 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
       #RUNTIME_OUTPUT_DIRECTORY "${arg_OUTPUT}"
     )
 
+    # llvm-ar x ir/example-lib__sources.lib --output=lib
+
     #get_target_property(output_name ${DEBASE_target} OUTPUT_NAME)
     #get_target_property(suffix ${DEBASE_target} SUFFIX)
     #message(STATUS "OUTPUT_NAME: ${output_name}")
