@@ -12,6 +12,10 @@ inputs:
 runs:
   using: composite
   steps:
+    - shell: bash
+      run: |
+        echo "cached: ${{inputs.cached == 'true'}}"
+      
     - name: Install LLVM
       if: ${{ inputs.matrix_id != 'win' }}
       uses: KyleMayes/install-llvm-action@v2
@@ -43,9 +47,7 @@ runs:
         rm clang+llvm.tar.xz
         sed -i -E 's|C:/Program Files[^/]*/Microsoft Visual Studio/[0-9]+/[^/]+/DIA SDK/lib/amd64/diaguids.lib;||g' llvm/lib/cmake/llvm/LLVMExports.cmake
     
-    - name: Set LLVM PATH (windows)
-      if: ${{ inputs.matrix_id == 'win' }}
+    - if: ${{ inputs.matrix_id == 'win' }}
       shell: bash
       run: |
-        echo "cached: ${{inputs.cached == true}}"
         echo "$GITHUB_WORKSPACE/llvm/bin" >> $GITHUB_PATH
