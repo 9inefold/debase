@@ -134,7 +134,7 @@ jobs:
       if: ${{ !env.ACT }}
       uses: actions/upload-artifact@v4
       with:
-        name: debase-${{ matrix.id }}
+        name: o-${{ matrix.id }}
         path: |
           build/driver/debase
           build/driver/debase.exe
@@ -156,18 +156,14 @@ jobs:
   
     - name: Move Binaries
       run: |
-        mv debase-win/debase.exe debase-win.exe
-        mv debase-win/llc.exe    llc-win.exe
+        mv o-win/build/driver/debase.exe  debase-win.exe
+        mv o-win/llvm/bin/llc.exe         llc-win.exe
 
-        mv debase-mac/debase debase-mac-temp
-        mv debase-mac/llc    llc-mac
-        rmdir debase-mac
-        mv debase-mac-temp debase-mac
+        mv o-mac/build/driver/debase      debase-mac
+        mv o-mac/llvm/bin/llc             llc-mac
 
-        mv debase-linux/debase debase-linux-temp
-        mv debase-linux/llc    llc-linux
-        rmdir debase-linux
-        mv debase-linux-temp debase-linux
+        mv o-linux/build/driver/debase    debase-linux
+        mv o-linux/llvm/bin/llc           llc-linux
   
     - name: Update Debase Release
       uses: andelf/nightly-release@main
