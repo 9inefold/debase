@@ -83,10 +83,17 @@ static Error extract(object::Archive* Archive, MemoryBufferRef MB,
     }
     StringRef Data = BufOrErr.get();
 
+    if (Data.empty()) {
+      if (Verbose)
+        WithColor::error(errs())
+          << "Found empty file '" << Name << "' in archive\n";
+      continue;
+    }
+
+    file_magic FileKind = identify_magic_ex(Data);
     // Basic filename check
     if (!Name.ends_with(".ll") && !Name.ends_with(".bc")) {
       // Check this is an ok filetype for us to handle
-      file_magic FileKind = identify_magic_ex(Data);
       if (FileKind != file_magic::bitcode) {
         auto FileKindName = file_magic_name(FileKind);
         if (!Permissive)
@@ -97,6 +104,7 @@ static Error extract(object::Archive* Archive, MemoryBufferRef MB,
       }
     }
 
+    //Data.consume_front("\xEF\xBB\xBF");
     // Cooking...
     Out.emplace_back(Data, Name);
   }

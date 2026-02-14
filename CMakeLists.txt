@@ -124,15 +124,19 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     endif()
 
     add_library(${DEBASE_target} STATIC ${arg_FILES})
-    target_compile_options(${DEBASE_target} PRIVATE -S -emit-llvm -Xclang -disable-llvm-passes)
+    target_compile_options(${DEBASE_target} PRIVATE
+      -S -emit-llvm -Xclang -disable-llvm-passes
+      -fms-compatibility-version=19
+    )
     target_link_libraries(${DEBASE_target} PRIVATE debase::runtime)
     set_target_properties(${DEBASE_target} PROPERTIES
-      ARCHIVE_OUTPUT_DIRECTORY "${arg_OUTPUT}"
-      LIBRARY_OUTPUT_DIRECTORY "${arg_OUTPUT}"
+      ARCHIVE_OUTPUT_DIRECTORY ${arg_OUTPUT}
+      LIBRARY_OUTPUT_DIRECTORY ${arg_OUTPUT}
       #RUNTIME_OUTPUT_DIRECTORY "${arg_OUTPUT}"
     )
 
     # llvm-ar x ir/example-lib__sources.lib --output=lib
+    # llc -O=3 --regalloc=pbqp -filetype=obj -o ./Class.o lib/Class.ll
 
     #get_target_property(output_name ${DEBASE_target} OUTPUT_NAME)
     #get_target_property(suffix ${DEBASE_target} SUFFIX)
