@@ -29,6 +29,12 @@ def parse_args():
     help='the target file'
   )
   parser.add_argument(
+    '--archive', '--archive-name',
+    dest='archive',
+    type=str, default='',
+    help='the output archive file'
+  )
+  parser.add_argument(
     '-o', '--output-dir',
     dest='output',
     type=Path, default=os.getcwd(),

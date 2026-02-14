@@ -24,6 +24,7 @@
 #pragma once
 
 #include "LLVM.hpp"
+#include "UniqueStringVector.hpp"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/MemoryBufferRef.h"
 #include "llvm/Support/Error.h"
@@ -32,6 +33,7 @@
 
 namespace llvm {
 class MemoryBuffer;
+class raw_fd_ostream;
 } // namespace llvm
 
 namespace debase_tool {
@@ -46,5 +48,12 @@ llvm::Error extractARFile(const Twine& ArchiveName,
                           std::unique_ptr<llvm::MemoryBuffer>& OutMB,
                           std::vector<llvm::MemoryBufferRef>& Out,
                           llvm::BumpPtrAllocator& BP);
+
+llvm::Error createARFile(llvm::raw_fd_ostream& OS,
+                         StringRef ArchiveName,
+                         const UniqueStringVector& Files);
+
+llvm::Error createARFile(StringRef ArchiveName,
+                         const UniqueStringVector& Files);
 
 } // namespace debase_tool

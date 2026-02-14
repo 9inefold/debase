@@ -69,6 +69,12 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
   endif()
   debase_set_binary(DEBASE_BINARY "${DEBASE_BINARY_DIR}/debase")
 
+  if(DEBASE_RUNTIME_ONLY)
+    add_custom_target(debase_pseudodriver DEPENDS ${DEBASE_BINARY})
+  else()
+    add_custom_target(debase_pseudodriver DEPENDS ${PROJECT_NAME})
+  endif()
+
   message(STATUS "Generating debase_library() for \"${DEBASE_BINARY}\"")
   find_package(Python3 QUIET COMPONENTS Interpreter)
   if(NOT TARGET Python3::Interpreter)
@@ -120,12 +126,8 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
       list(APPEND arg_PASSTHROUGH "--strip-debug")
     endif()
 
-    #message(STATUS "CONFIG: ${arg_CONFIG}")
-    message(STATUS "FILES: ${arg_FILES}")
-    message(STATUS "OUTPUT: ${arg_OUTPUT}")
-
     if(NOT arg_FILES)
-      set(arg_FILES "${DEBASE_BASE_DIR}/py/Dummy.cpp")
+      set(arg_FILES py/Dummy.cpp)
     endif()
 
     add_library(${DEBASE_target} STATIC ${arg_FILES})
@@ -148,25 +150,62 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     else()
       set(ar_suffix "a")
     endif()
-    #set(ar_output "${arg_OUTPUT}/${target}__sources.${ar_suffix}")
-    set(ar_output "${arg_OUTPUT}/file.txt")
+    set(ar_name "${target}-out.${ar_suffix}")
+    set(ar_output "${arg_OUTPUT}/${ar_name}")
+    #set(ar_output "${arg_OUTPUT}/file.txt")
 
+    add_custom_target(${target}__target DEPENDS ${DEBASE_target})
     add_custom_command(
-      OUTPUT ${ar_output}
+      TARGET ${target}__target PRE_BUILD
       COMMAND Python3::Interpreter ${DEBASE_GENERATE_PY}
+        --target-name=$<TARGET_FILE_NAME:${DEBASE_target}>
+        --archive-name="${ar_name}"
         --build-type="${CMAKE_BUILD_TYPE}"
         --output-dir="${arg_OUTPUT}"
         --output-filename="${target}-out.json"
-        --target-name=$<TARGET_FILE_NAME:${DEBASE_target}>
         "--passthrough=\"${arg_PASSTHROUGH}\""
         $<TARGET_PROPERTY:${DEBASE_target},SOURCES>
         # Args...
-      DEPENDS ${DEBASE_target} ${arg_FILES}
+      #DEPENDS
+      #  debase_pseudodriver
+      #  ${DEBASE_target} ${arg_FILES}
+      BYPRODUCTS ${ar_output}
       #COMMAND_EXPAND_LISTS
       COMMENT "Generating ${target} IR")
     
-    add_custom_target(${target}__target DEPENDS ${ar_output})
+    set_source_files_properties(${ar_output}
+      TARGET_DIRECTORY ${target}__target
+      PROPERTIES GENERATED 1
+    )
+
+    #add_custom_command(
+    #  TARGET ${target}__target PRE_BUILD
+    #  COMMAND llvm-objdump ${ar_output}
+    #)
+
+    #add_custom_command(
+    #  OUTPUT ${ar_output}
+    #  COMMAND Python3::Interpreter ${DEBASE_GENERATE_PY}
+    #    --target-name=$<TARGET_FILE_NAME:${DEBASE_target}>
+    #    --archive-name="${ar_output}"
+    #    --build-type="${CMAKE_BUILD_TYPE}"
+    #    --output-dir="${arg_OUTPUT}"
+    #    --output-filename="${target}-out.json"
+    #    "--passthrough=\"${arg_PASSTHROUGH}\""
+    #    $<TARGET_PROPERTY:${DEBASE_target},SOURCES>
+    #    # Args...
+    #  DEPENDS
+    #    debase_pseudodriver
+    #    ${DEBASE_target} ${arg_FILES}
+    #  BYPRODUCTS ${ar_output}
+    #  #COMMAND_EXPAND_LISTS
+    #  COMMENT "Generating ${target} IR")
+    
+    #add_custom_target(${target}__target DEPENDS ${ar_output})
     add_library(${target} STATIC py/Dummy.cpp)
+    
+    #target_link_libraries(${target} PRIVATE ${ar_output})
+    target_link_options(${target} PUBLIC "-Wl,${ar_output}")
     add_dependencies(${target} ${target}__target)
   endfunction(debase_library)
 
@@ -176,27 +215,26 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
   # Forwards to target_include_directories
   function(debase_include_directories target)
     target_include_directories(${target}__sources ${ARGN})
+    target_include_directories(${target} ${ARGN})
   endfunction(debase_include_directories)
 
   # Forwards to target_compile_definitions
   function(debase_compile_definitions target)
     target_compile_definitions(${target}__sources ${ARGN})
+    target_compile_definitions(${target} ${ARGN})
   endfunction(debase_compile_definitions)
 
   # Forwards to target_compile_features
   function(debase_compile_features target)
     target_compile_features(${target}__sources ${ARGN})
+    target_compile_features(${target} ${ARGN})
   endfunction(debase_compile_features)
 
   # Forwards to target_compile_options
   function(debase_compile_options target)
     target_compile_options(${target}__sources ${ARGN})
+    target_compile_options(${target} ${ARGN})
   endfunction(debase_compile_options)
-
-  # Forwards to target_sources
-  function(debase_sources target)
-    target_sources(${target}__sources ${ARGN})
-  endfunction(debase_sources)
 
   # Forwards to target_link_libraries
   function(debase_link_libraries target)
@@ -209,6 +247,11 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     target_link_directories(${target}__sources ${ARGN})
     target_link_directories(${target} ${ARGN})
   endfunction(debase_link_directories)
+
+  # Forwards to target_sources
+  function(debase_sources target)
+    target_sources(${target}__sources ${ARGN})
+  endfunction(debase_sources)
 endif()
 
 ################# DONT INCLUDE THE REST OF THIS ################################
@@ -226,8 +269,8 @@ debase_library(example-lib
     --allow-no-builtins
     --permissive
 )
-
 debase_sources(example-lib PUBLIC examples/Filename/Class.cpp)
+debase_include_directories(example-lib PUBLIC examples/Filename)
 
-add_executable(example-driver DummyDriver.cpp)
-target_link_libraries(example-driver example-lib)
+add_executable(example-driver examples/Filename/Driver.cpp)
+target_link_libraries(example-driver PUBLIC example-lib)

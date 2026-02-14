@@ -159,15 +159,28 @@ AllowNoBI("allow-no-builtins", cl::Hidden,
           cl::desc("Ignore files which have no builtins"),
           cl::init(false), cl::cat(DebaseToolCategory));
 
+static std::optional<std::string> ArchiveOnly;
 static std::optional<std::string> OutputSuccessfulFilenames;
+
+// The ArchiveOnly cl option
+static cl::opt<std::string>
+ArchiveOnlyOpt(
+  "archive-only", cl::Hidden,
+  cl::desc("Only archive the input files"),
+  cl::cat(DebaseToolCategory), cl::ValueOptional,
+  cl::callback([] (const std::string& ArchiveName) {
+    if (!ArchiveName.empty())
+      ArchiveOnly.emplace(ArchiveName);
+    else
+      ArchiveOnly.emplace("out.a");
+  }));
 
 // The OutputSuccessfulFilenames cl option
 static cl::opt<std::string>
 OutputSuccessfulFilenamesOpt(
   "output-filenames",
   cl::desc("Output a list of the updated files"),
-  cl::cat(DebaseToolCategory),
-  cl::ValueOptional,
+  cl::cat(DebaseToolCategory), cl::ValueOptional,
   cl::callback([] (const std::string& OName) {
     if (!OName.empty())
       OutputSuccessfulFilenames.emplace(OName);
@@ -1031,9 +1044,6 @@ int main(int Argc, char** Argv) {
 
   cl::ParseCommandLineOptions(Argc, Argv,
     "llvmir pass that removes calls to bases in ctors/dtors.\n");
-  
-  auto SM = std::make_unique<SymbolMatcher>();
-  //LLVMContext Context;
 
   //if (PrintPasses) {
   //  PassBuilder PB;
@@ -1059,6 +1069,9 @@ int main(int Argc, char** Argv) {
       return 1;
     }
   }
+
+  auto SM = std::make_unique<SymbolMatcher>();
+  //LLVMContext Context;
 
   // TODO: Unique filenames.
   UniqueStringVector ValidFilenames;
@@ -1097,6 +1110,33 @@ int main(int Argc, char** Argv) {
     WithColor::error(errs())
       << "No valid input files were provided!";
     return 1;
+  }
+
+  if (ArchiveOnly) {
+    vbss() << "Only running archiver!\n";
+    SmallString<80> ArchivePath(OutputFilepath.getValue());
+    sys::path::append(ArchivePath, *ArchiveOnly);
+    // Create FD
+    StringRef ArName = ArchivePath.str();
+    errs() << "Generated archive: '" << ArName << "'!\n";
+    //ErrorOr<int> FDOrErr = CreateToolOutputFile(ArName, false);
+    //if (auto EC = FDOrErr.getError()) {
+    //  WithColor::error(errs())
+    //    << "Failed to create archive: "
+    //    << EC.message() << "\n";
+    //  return 1;
+    //}
+    //raw_fd_ostream OS(*FDOrErr, true);
+    //if (Error E = createARFile(OS, ArName, ValidFilenames)) {
+    if (Error E = createARFile(ArName, ValidFilenames)) {
+      WithColor::error(errs())
+        << "Failed to create archive: "
+        << toString(std::move(E)) << "\n";
+      return 1;
+    }
+
+    errs() << "Generated archive: '" << ArName << "'!\n";
+    return 0;
   }
 
   //std::vector<std::unique_ptr<MemoryBuffer>> ArchiveFiles;

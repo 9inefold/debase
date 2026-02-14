@@ -29,17 +29,14 @@ def run_debaser(debase_bin, args):
     (o / target).as_posix(),
     '-o', (o / 'lib').as_posix(),
     f'--output-filenames={jsonout}',
-    '--verbose'
+    *passthrough,
+    *args.files
   ]
-  debase_args.extend(passthrough)
-  debase_args.extend(args.files)
-  print(args.files)
-  #print(debase_args)
 
+  #print(debase_args)
   result = run_process(debase_args, str(o))
   if result.returncode != 0:
     errs('failed to run debaser!')
-    #errs(result.stdout.strip())
     errs(result.stderr.strip())
     sys.exit(result.returncode)
   
@@ -59,7 +56,6 @@ def run_llc(llc_bin, args, bc_files: list[str]):
   out_files = []
   failed = False
 
-  #llc -O=3 --regalloc=pbqp -filetype=obj -o ./Class.o lib/Class.ll
   for bc_file in bc_files:
     out = o / (Path(bc_file).stem + '.o')
     llc_args = [
@@ -71,18 +67,39 @@ def run_llc(llc_bin, args, bc_files: list[str]):
     ]
 
     #print(llc_args)
-    result = run_process(llc_args, o.as_posix())
+    result = run_process(llc_args, str(o))
     if result.returncode == 0:
       out_files.append(out.as_posix())
     else:
       errs('failed to run llc on', Path(bc_file).as_posix(), '!')
-      #errs(result.stdout.strip())
       errs(result.stderr.strip())
       failed = True
   
   if failed:
     sys.exit(1)
   return out_files
+
+def run_archive(debase_bin, args, out_files):
+  o = Path(args.output)
+  archive_only = '--archive-only'
+  if len(args.archive) != 0:
+    archive_only += f'={args.archive}'
+  
+  archive_args = [
+    debase_bin,
+    archive_only,
+    '--verbose',
+    '-o', o.as_posix(),
+    *out_files,
+  ]
+
+  print(archive_args)
+  result = run_process(archive_args, str(o))
+  errs(result.stderr.strip())
+  if result.returncode != 0:
+    errs('archiving failed!')
+    errs(result.stderr.strip())
+    sys.exit(1)
 
 def debase_main(debase_bin, llc_bin):
   args = parse_args()
@@ -98,7 +115,6 @@ def debase_main(debase_bin, llc_bin):
     bc_files = [bc_files]
   
   out_files = run_llc(llc_bin, args, bc_files)
-  print(out_files)
-
-  sys.exit(1)
-  (o / 'file.txt').write_text('hello!')
+  #print(out_files)
+  run_archive(debase_bin, args, out_files)
+  print('Generated archive!')

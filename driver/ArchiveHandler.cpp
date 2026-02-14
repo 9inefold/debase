@@ -30,7 +30,9 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/WithColor.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace debase_tool;
 using namespace llvm;
@@ -58,6 +60,8 @@ static Error MBError(MemoryBufferRef MB, Error OtherErr) {
     std::move(OtherErr)
   );
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 static Error extract(object::Archive* Archive, MemoryBufferRef MB,
                      std::vector<MemoryBufferRef>& Out,
@@ -156,4 +160,48 @@ Error debase_tool::extractARFile(const Twine& ArchiveName,
   MemoryBufferRef MB(**BufOrErr);
   OutMB = std::move(*BufOrErr);
   return extractInMemoryARFile(MB, Out, BP);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static constexpr SymtabWritingMode SymTab = SymtabWritingMode::NormalSymtab;
+static constexpr bool Thin = false;
+static constexpr bool Deterministic = false;
+
+static Expected<NewArchiveMember> getArchiveMember(StringRef FileName) {
+  Expected<NewArchiveMember> NMOrErr =
+      NewArchiveMember::getFile(FileName, Deterministic);
+  if (!NMOrErr)
+    return createFileError(FileName, NMOrErr.takeError());
+  NMOrErr->MemberName = sys::path::filename(NMOrErr->MemberName);
+  return NMOrErr;
+}
+
+static Error performWriteOperation(StringRef ArchiveName,
+                                   const UniqueStringVector& Files,
+                                   std::unique_ptr<MemoryBuffer> OldArchiveBuf) {
+  std::vector<NewArchiveMember> NewMembers;
+  for (auto& FileName : Files) {
+    Expected<NewArchiveMember> NMOrErr = getArchiveMember(FileName);
+    if (!Permissive)
+      return NMOrErr.takeError();
+    NewMembers.push_back(std::move(*NMOrErr));
+  }
+
+  object::Archive::Kind Kind
+      = !NewMembers.empty() ? NewMembers.front().detectKindFromObject()
+                            : object::Archive::getDefaultKind();
+  return llvm::writeArchive(ArchiveName, NewMembers, SymTab, Kind,
+                            Deterministic, Thin, std::move(OldArchiveBuf));
+}
+
+Error debase_tool::createARFile(raw_fd_ostream& OS,
+                                StringRef ArchiveName,
+                                const UniqueStringVector& Files) {
+  report_fatal_error("createARFile is unimplemented!");
+}
+
+Error debase_tool::createARFile(StringRef ArchiveName,
+                                const UniqueStringVector& Files) {
+  return performWriteOperation(ArchiveName, Files, /*OldArchiveBuf=*/nullptr);
 }
