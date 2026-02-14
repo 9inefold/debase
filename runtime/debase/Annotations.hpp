@@ -28,11 +28,11 @@
 DEBASE_BEGIN_EXTERN_C
 
 /// Marks the start of a function body.
-DEBASE_ANNOTATION_CC void __debase_mark_begin(void) DEBASE_NOEXCEPT;
+inline DEBASE_ANNOTATION_CC void __debase_mark_begin(void) DEBASE_NOEXCEPT {}
 /// Marks the end of a function body.
-DEBASE_ANNOTATION_CC void __debase_mark_end(void) DEBASE_NOEXCEPT;
+inline DEBASE_ANNOTATION_CC void __debase_mark_end(void) DEBASE_NOEXCEPT {}
 /// Marks that there is a continuation for this function.
-DEBASE_ANNOTATION_CC void __debase_continuation(void) DEBASE_NOEXCEPT;
+inline DEBASE_ANNOTATION_CC void __debase_continuation(void) DEBASE_NOEXCEPT {}
 
 /// Marks the start of a constructor body.
 #define __debase_ctor_begin __debase_mark_begin

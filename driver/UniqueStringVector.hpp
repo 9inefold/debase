@@ -22,6 +22,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
+#pragma once
+
 #include "LLVM.hpp"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SmallVector.h"

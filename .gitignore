@@ -14,6 +14,8 @@ build
 **/*.inc
 **/*.hidden.*
 
+__pycache__
+
 .env
 .env.test
 

@@ -42,7 +42,7 @@ namespace debase_tool {
 class FilePropertyCache;
 
 /// Utility to help match symbols.
-class SymbolMatcher {
+class SymbolMatcher final {
   llvm::BumpPtrAllocator BP;
   /// Used to cache pattern mappings.
   llvm::StringMap<Pattern*, llvm::BumpPtrAllocator&> PatternMappings;
@@ -56,11 +56,15 @@ private:
   PatternStorageTy CtorPatterns;
   /// Patterns used for matching destructors.
   PatternStorageTy DtorPatterns;
-
   /// Contains the Patterns which need to be destroyed.
   llvm::SmallPtrSet<Pattern*, 4> ToDestroy;
+
+  /// The type used to store replacements.
+  using ReplacementStorageTy = SmallVector<Replacer*, 4>;
   /// Contains replacements
-  SmallVector<Replacer*, 4> Replacements;
+  ReplacementStorageTy Replacements;
+  /// External source of replacements
+  ReplacementStorageTy* ExtReplacements = nullptr;
 
   /// Filename of the loaded config (if exists)
   std::optional<StringRef> ConfigFilename;
@@ -71,11 +75,13 @@ private:
   bool Permissive = false;
 
 public:
+  class CLOptHandler;
+  friend class CLOptHandler;
   class JSONLoaderHandler;
   friend class JSONLoaderHandler;
 
-  SymbolMatcher(bool Permissive = false)
-   : PatternMappings(BP), Permissive(Permissive) {}
+  SymbolMatcher();
+  SymbolMatcher(bool Permissive);
   ~SymbolMatcher();
 
   /// Loads symbol patterns and filenames from a JSON config file.
@@ -111,8 +117,22 @@ public:
   /// Creates a new `Pattern` object if uncached, otherwise returns cached.
   Expected<Pattern*> compilePattern(
    StringRef Pat, SmallVectorImpl<Pattern::Token>* ToksBuf = nullptr);
+  
+  /// Adds a pattern from an external source.
+  void addExternalPattern(StringRef Pat, Pattern* P);
+  /// Adds a pattern from an external source.
+  void addExternalPattern(Pattern* P);
 
 private:
+  /// Creates a completely new `Pattern` object.
+  Expected<Pattern*> compilePatternImpl(StringRef Pat);
+  /// Creates a completely new `Pattern` object from tokens.
+  Expected<Pattern*> compilePatternImpl(
+      StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks);
+  /// Creates a completely new `Pattern` object from tokens.
+  Expected<Pattern*> compilePatternImpl(ArrayRef<Pattern::Token> Toks);
+
+  /// Combines tokens into compatible groups.
   struct TokenGroup {
     const Pattern::Token* Tok = nullptr;
     unsigned Count = 0;
@@ -128,14 +148,6 @@ private:
   /// @return The number of glob groups.
   Expected<unsigned> splitIntoGroups(ArrayRef<Pattern::Token> Toks,
                                      SmallVectorImpl<TokenGroup>& Groups);
-
-  /// Creates a completely new `Pattern` object.
-  Expected<Pattern*> compilePatternImpl(StringRef Pat);
-  /// Creates a completely new `Pattern` object from tokens.
-  Expected<Pattern*> compilePatternImpl(
-      StringRef Pat, SmallVectorImpl<Pattern::Token>& Toks);
-  /// Creates a completely new `Pattern` object from tokens.
-  Expected<Pattern*> compilePatternImpl(ArrayRef<Pattern::Token> Toks);
 
   /// Creates a completely new `Pattern` without globs.
   Pattern* compilePattern0Globs(ArrayRef<TokenGroup> Groups);

@@ -25,6 +25,10 @@ using namespace llvm::sys;
 
 using Token = Pattern::Token;
 
+static StringRef get_stem(StringRef filename) {
+  return path::filename(filename).split('.').first;
+}
+
 Expected<StringRef> FilePropertyCache::getPropertyRaw(const char* prop) {
   using enum Token::FilePropertyKind;
   Token::FilePropertyKind K = Token::GetFilePropertyKind(prop);
@@ -39,7 +43,7 @@ Expected<StringRef> FilePropertyCache::getPropertyRaw(const char* prop) {
   case FPKStem:
     if (LLVM_LIKELY(stem))
       return *stem;
-    stem = path::stem(filename);
+    stem = get_stem(filename);
     return *stem;
   case FPKDir:
     if (dir)

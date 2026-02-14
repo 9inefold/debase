@@ -1,0 +1,11 @@
+import os, sys
+
+debase_bin = "@DEBASE_BINARY@"
+llc_bin = "@DEBASE_LLC@"
+
+source_root = "@DEBASE_BASE_DIR@"
+sys.path.insert(0, os.path.join(source_root, 'py'))
+
+if __name__ == "__main__":
+  from debase.main import debase_main
+  debase_main(debase_bin, llc_bin)

@@ -22,12 +22,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "SymbolMatcher.hpp"
+#include "Shared.hpp"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Option/Option.h"
+#include "llvm/Support/BuryPointer.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/WithColor.h"
 #include "FilePropertyCache.hpp"
 #include "PatternLex.hpp"
 #include "SymbolFeatures.hpp"
@@ -39,13 +43,66 @@ using namespace llvm;
 
 using Token = Pattern::Token;
 
-static Error MakeError(const Twine& Msg) {
-  return createStringError(llvm::inconvertibleErrorCode(), Msg);
+class SymbolMatcher::CLOptHandler {
+  std::unique_ptr<SymbolMatcher> SM;
+public:
+  CLOptHandler() = default;
+  ~CLOptHandler() {
+    if (SM)
+      llvm::BuryPointer(std::move(SM));
+  }
+
+  /// Gets the current instance if initialized.
+  SymbolMatcher* get() const { return SM.get(); }
+  /// Interface for custom cl::list storage.
+  void push_back(const std::string& Pat) {
+    SymbolMatcher* M = this->make();
+    Expected<Pattern*> POrErr = M->compilePattern(Pat);
+    if (!POrErr) {
+      WithColor::warning(errs())
+        << toString(POrErr.takeError()) << '\n';
+      return;
+    }
+    
+    Pattern* P = *POrErr;
+    M->CtorPatterns.insert(P);
+    M->DtorPatterns.insert(P);
+  }
+
+private:
+  SymbolMatcher* make() {
+    if (LLVM_LIKELY(SM))
+      return SM.get();
+    // Always make permissive so we can continue.
+    SM = std::make_unique<SymbolMatcher>(true);
+    return SM.get();
+  }
+};
+
+// The global opt handler
+static SymbolMatcher::CLOptHandler SMCLHandler;
+
+static cl::list<std::string, SymbolMatcher::CLOptHandler>
+InputPatterns("patterns",
+  cl::desc("Extra patterns to be provided to SymbolMatcher"),
+  cl::value_desc("<patterns...>"),
+  cl::cat(DebaseToolCategory),
+  cl::location(SMCLHandler),
+  cl::ZeroOrMore
+);
+
+SymbolMatcher::SymbolMatcher(bool Permissive)
+    : PatternMappings(BP), Permissive(Permissive) {
+  if (auto* CL = SMCLHandler.get()) {
+    for (auto&& [Name, P] : CL->PatternMappings)
+      this->addExternalPattern(Name, P);
+    // TODO: Find a better method if needed
+    this->ExtReplacements = &CL->Replacements;
+  }
 }
 
-LLVM_ATTRIBUTE_ALWAYS_INLINE
-ArrayRef<Pattern::Token> SymbolMatcher::TokenGroup::arr() const {
-  return {Tok, Tok + Count};
+SymbolMatcher::SymbolMatcher()
+    : SymbolMatcher(debase_tool::Permissive) {
 }
 
 SymbolMatcher::~SymbolMatcher() {
@@ -62,17 +119,25 @@ SymbolMatcher::~SymbolMatcher() {
 Error SymbolMatcher::setFilename(StringRef Filename) {
   CurrentFilename = intern(Filename);
   FilePropertyCache FPC(*CurrentFilename);
+  int ErrorCount = 0;
   for (Replacer* R : Replacements) {
     if (Error E = R->replace(BP, FPC)) [[unlikely]] {
       if (!Permissive)
         return E;
-#ifndef NDEBUG
-      //else
-      //  outs() << "Unable to set filename for "
-      //         << static_cast<void*>(R) << '\n';
-#endif
+      ++ErrorCount;
     }
   }
+  if (ExtReplacements) {
+    for (Replacer* R : *ExtReplacements) {
+      if (Error E = R->replace(BP, FPC)) {
+        if (!Permissive)
+          return E;
+        ++ErrorCount;
+      }
+    }
+  }
+  if (ErrorCount > 0)
+    return MakeError("Failed to set " + Twine(ErrorCount) + " filenames");
   return Error::success();
 }
 
@@ -107,6 +172,22 @@ bool SymbolMatcher::ownsThisData(const void* Ptr) {
   return BP.identifyObject(Ptr).has_value();
 }
 
+void SymbolMatcher::addExternalPattern(Pattern* P) {
+  assert(!ownsThisData(P) && "not actually external!");
+  CtorPatterns.insert(P);
+  DtorPatterns.insert(P);
+}
+
+void SymbolMatcher::addExternalPattern(StringRef Pat, Pattern* P) {
+  assert(!ownsThisData(P) && "not actually external!");
+  Pattern*& Mapping = PatternMappings[Pat];
+  if (Mapping == nullptr)
+    Mapping = P;
+  // Add pattern
+  CtorPatterns.insert(Mapping);
+  DtorPatterns.insert(Mapping);
+}
+
 Expected<Pattern*> SymbolMatcher::compilePattern(
     StringRef Pat, SmallVectorImpl<Pattern::Token>* ToksBuf) {
   auto [It, DidEmplace] = PatternMappings.try_emplace(Pat, nullptr);
@@ -139,6 +220,11 @@ Expected<Pattern*> SymbolMatcher::compilePatternImpl(
   if (Error E = lexTokensForPattern(Pat, Toks, BP))
     return E;
   return compilePatternImpl(Toks);
+}
+
+LLVM_ATTRIBUTE_ALWAYS_INLINE
+ArrayRef<Pattern::Token> SymbolMatcher::TokenGroup::arr() const {
+  return {Tok, Tok + Count};
 }
 
 Expected<unsigned> SymbolMatcher::splitIntoGroups(ArrayRef<Pattern::Token> Toks,
