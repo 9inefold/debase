@@ -30,6 +30,8 @@ extern llvm::cl::OptionCategory DebaseToolCategory;
 extern bool Strict;
 /// Enabled if and only if `-mode=permissive`.
 extern bool Permissive;
+/// Enabled if and only if `--verbose`.
+extern bool Verbose;
 
 /// Creates a new string error by forwarding the arguments to
 /// `llvm::createStringError`.
@@ -39,6 +41,16 @@ inline llvm::Error MakeError(ArgsT&&...Args) {
     llvm::inconvertibleErrorCode(),
     std::forward<ArgsT>(Args)...
   );
+}
+
+inline llvm::Error MakeError(const Twine& Msg) {
+  return createStringError(
+    llvm::inconvertibleErrorCode(), Msg);
+}
+
+inline void exitP(int ErrorCode = 1) {
+  if (LLVM_UNLIKELY(!Permissive))
+    std::exit(ErrorCode);
 }
 
 } // namespace debase_tool

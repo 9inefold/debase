@@ -23,6 +23,7 @@
 
 #include "Pattern.hpp"
 #include "PatternLex.hpp"
+#include "Shared.hpp"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -44,10 +45,6 @@ using namespace llvm;
 
 using Token = Pattern::Token;
 static_assert(sizeof(Token) <= 2 * sizeof(void*));
-
-static Error MakeError(const Twine& Msg) {
-  return createStringError(llvm::inconvertibleErrorCode(), Msg);
-}
 
 static StringRef InternStringRef(BumpPtrAllocator& BP, StringRef S) {
   if (S.empty())
