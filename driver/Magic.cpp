@@ -17,6 +17,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "Magic.hpp"
+#include "Shared.hpp"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 
 using namespace debase_tool;
@@ -30,6 +32,8 @@ llvm::file_magic debase_tool::identify_magic_ex(StringRef MBRef) {
   MBRef.consume_front("\xEF\xBB\xBF");
   // Check for IR start
   if (MBRef.starts_with_insensitive("; ModuleID"))
+    return llvm::file_magic::bitcode;
+  else if (Permissive && llvm::isASCII(MBRef))
     return llvm::file_magic::bitcode;
   // Some other kind of file
   return llvm::file_magic::unknown;
