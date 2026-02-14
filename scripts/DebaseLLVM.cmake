@@ -11,6 +11,11 @@ CPMAddPackage(
 )
 
 find_package(ZLIB REQUIRED)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND DEBASE_MSVC_LIKE)
+  target_compile_definitions(zlibstatic PRIVATE -D_CRT_SECURE_NO_WARNINGS=1)
+  target_compile_options(zlibstatic PRIVATE -Wno-deprecated-declarations)
+endif()
+
 if(NOT TARGET ZLIB::ZLIB)
   add_library(ZLIB::ZLIB ALIAS zlibstatic)
 endif()
