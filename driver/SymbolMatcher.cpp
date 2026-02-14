@@ -119,17 +119,25 @@ SymbolMatcher::~SymbolMatcher() {
 Error SymbolMatcher::setFilename(StringRef Filename) {
   CurrentFilename = intern(Filename);
   FilePropertyCache FPC(*CurrentFilename);
+  int ErrorCount = 0;
   for (Replacer* R : Replacements) {
     if (Error E = R->replace(BP, FPC)) [[unlikely]] {
       if (!Permissive)
         return E;
-#ifndef NDEBUG
-      //else
-      //  outs() << "Unable to set filename for "
-      //         << static_cast<void*>(R) << '\n';
-#endif
+      ++ErrorCount;
     }
   }
+  if (ExtReplacements) {
+    for (Replacer* R : *ExtReplacements) {
+      if (Error E = R->replace(BP, FPC)) {
+        if (!Permissive)
+          return E;
+        ++ErrorCount;
+      }
+    }
+  }
+  if (ErrorCount > 0)
+    return MakeError("Failed to set " + Twine(ErrorCount) + " filenames");
   return Error::success();
 }
 
