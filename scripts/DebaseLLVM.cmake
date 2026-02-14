@@ -39,8 +39,8 @@ debase_set_binary(DEBASE_LLC "${LLVM_TOOLS_BINARY_DIR}/llc")
 separate_arguments(LLVM_DEFS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 llvm_map_components_to_libnames(llvm_libs
   ${DEBASE_TARGETS} #${llvm_components}
+  Core BinaryFormat BitReader BitWriter Demangle Object Option Support
   InstCombine IPO Passes TransformUtils
-  Core Demangle Option Support
 )
 
 function(dump_llvm_libs lib_var)

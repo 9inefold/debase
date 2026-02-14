@@ -5,7 +5,9 @@ set(DEBASE_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}" PARENT_SCOPE)
 
 add_executable(${PROJECT_NAME}
   Driver.cpp
+  ArchiveHandler.cpp
   FilePropertyCache.cpp
+  Magic.cpp
   NameClassifier.cpp
   Pattern.cpp
   SymbolMatcher.cpp
