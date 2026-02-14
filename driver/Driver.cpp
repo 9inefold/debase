@@ -154,6 +154,11 @@ DumpModule("dump-module", cl::Hidden,
            cl::desc("Dump the module once finished"),
            cl::init(false), cl::cat(DebaseToolCategory));
 
+static cl::opt<bool>
+AllowNoBI("allow-no-builtins", cl::Hidden,
+          cl::desc("Ignore files which have no builtins"),
+          cl::init(false), cl::cat(DebaseToolCategory));
+
 static std::optional<std::string> OutputSuccessfulFilenames;
 
 // The OutputSuccessfulFilenames cl option
@@ -599,18 +604,13 @@ void DeBaser::runPasses(const std::vector<FunctionPass*>& Passes, StringRef Pass
     error() << "SetUnlinks is false!\n";
     return;
   }
-
+  
   for (auto [F, _] : LocatedRefs) {
     bool DidModify = false;
-    for (FunctionPass* P : Passes) {
-      //if (Verbose) {
-      //  WithColor::note(outs(), PassName)
-      //    << "Pass: " << P->getPassName() << "\n";
-      //  outs().flush();
-      //}
+    for (FunctionPass* P : Passes)
       if (P->runOnFunction(*F))
         DidModify = true;
-    }
+    // ...
     if (DidModify && Verbose) {
       WithColor::note(outs(), PassName)
         << F->getName() << " was modified.\n";
@@ -848,8 +848,7 @@ bool DeBaser::loadModule(MemoryBufferRef IRFile, LLVMContext& Context) {
   SMDiagnostic Err;
   M = parseIR(IRFile, Err, Context);
   if (!M) {
-    if (!isASCII(IRFile.getBuffer()))
-      errs() << "'" << IRFile.getBufferIdentifier() << "' isn't ascii!\n";
+    //if (!isASCII(IRFile.getBuffer()))
     Err.print(Argv0.data(), error());
     return false;
   }
@@ -1100,7 +1099,8 @@ int main(int Argc, char** Argv) {
     return 1;
   }
 
-  std::vector<std::unique_ptr<MemoryBuffer>> ArchiveFiles;
+  //std::vector<std::unique_ptr<MemoryBuffer>> ArchiveFiles;
+  BumpPtrAllocator ArBP;
   std::vector<MemoryBufferRef> ExtraModuleFiles;
 
   /// Returns true if parsing should continue (.ll or .bc).
@@ -1141,13 +1141,10 @@ int main(int Argc, char** Argv) {
     }
 
     // Now try and parse the archive contents.
-    MemoryBufferRef MB(*FileBuffer);
-    ArchiveFiles.push_back(std::move(FileBuffer));
-    if (Error E = extractInMemoryARFile(MB, ExtraModuleFiles)) {
+    if (Error E = extractInMemoryARFile(*FileBuffer, ExtraModuleFiles, ArBP)) {
       std::string ErrMsg = toString(std::move(E));
       WithColor::error(errs()) << ErrMsg << '\n';
       debase_tool::exitP(1);
-      return false;
     }
 
     return false;
@@ -1262,7 +1259,8 @@ int main(int Argc, char** Argv) {
       DB->setNameDemangler(&MClass);
 
     if (!DB->loadRefsAndBuiltins()) {
-      errs() << "Unable to load builtins for '" << Filename << "'\n";
+      if (!AllowNoBI)
+        errs() << "Unable to load builtins for '" << Filename << "'\n";
       return;
     }
 

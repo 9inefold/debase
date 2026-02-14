@@ -24,6 +24,7 @@
 #pragma once
 
 #include "LLVM.hpp"
+#include "llvm/Support/Allocator.h"
 #include "llvm/Support/MemoryBufferRef.h"
 #include "llvm/Support/Error.h"
 #include <memory>
@@ -37,11 +38,13 @@ namespace debase_tool {
 
 /// Extracts x-archive file contents into `Out`.
 llvm::Error extractInMemoryARFile(llvm::MemoryBufferRef MB,
-                                  std::vector<llvm::MemoryBufferRef>& Out);
+                                  std::vector<llvm::MemoryBufferRef>& Out,
+                                  llvm::BumpPtrAllocator& BP);
 
 /// Extracts x-archive file contents into `Out`.
 llvm::Error extractARFile(const Twine& ArchiveName,
                           std::unique_ptr<llvm::MemoryBuffer>& OutMB,
-                          std::vector<llvm::MemoryBufferRef>& Out);
+                          std::vector<llvm::MemoryBufferRef>& Out,
+                          llvm::BumpPtrAllocator& BP);
 
 } // namespace debase_tool

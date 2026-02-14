@@ -26,6 +26,7 @@
 #include "Shared.hpp"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/ArchiveWriter.h"
+#include "llvm/Support/Allocator.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -33,6 +34,15 @@
 
 using namespace debase_tool;
 using namespace llvm;
+
+static StringRef InternStringRef(BumpPtrAllocator& BP, StringRef S) {
+  if (S.empty())
+    return "";
+  char* Out = BP.Allocate<char>(S.size() + 1);
+  std::memcpy(Out, S.data(), S.size());
+  Out[S.size()] = '\0';
+  return {Out, S.size()};
+}
 
 static Error createFileError(const Twine& F, const Twine& Msg) {
   return createFileError(F, MakeError(Msg));
@@ -50,7 +60,8 @@ static Error MBError(MemoryBufferRef MB, Error OtherErr) {
 }
 
 static Error extract(object::Archive* Archive, MemoryBufferRef MB,
-                     std::vector<MemoryBufferRef>& Out) {
+                     std::vector<MemoryBufferRef>& Out,
+                     llvm::BumpPtrAllocator& BP) {
   assert(!Archive->isThin() && "Setup invalid?");
   int ErrCount = 0;
   auto RecognizeError = [&ErrCount, MB] (const Twine& Msg) {
@@ -104,8 +115,9 @@ static Error extract(object::Archive* Archive, MemoryBufferRef MB,
       }
     }
 
-    //Data.consume_front("\xEF\xBB\xBF");
-    // Cooking...
+    // Intern because otherwise it tweaks the fuck out
+    Data = InternStringRef(BP, Data);
+    Name = InternStringRef(BP, Name);
     Out.emplace_back(Data, Name);
   }
 
@@ -117,7 +129,8 @@ static Error extract(object::Archive* Archive, MemoryBufferRef MB,
 }
 
 Error debase_tool::extractInMemoryARFile(MemoryBufferRef MB,
-                                         std::vector<MemoryBufferRef>& Out) {
+                                         std::vector<MemoryBufferRef>& Out,
+                                         llvm::BumpPtrAllocator& BP) {
   auto ArchiveOrError = object::Archive::create(MB);
   if (!ArchiveOrError)
     return MBError(MB, ArchiveOrError.takeError());
@@ -125,12 +138,13 @@ Error debase_tool::extractInMemoryARFile(MemoryBufferRef MB,
   std::unique_ptr<object::Archive> Archive = std::move(ArchiveOrError.get());
   if (Archive->isThin())
     return MBError(MB, "extracting from a thin archive is not supported.");
-  return extract(Archive.get(), MB, Out);
+  return extract(Archive.get(), MB, Out, BP);
 }
 
 Error debase_tool::extractARFile(const Twine& ArchiveName,
                                  std::unique_ptr<MemoryBuffer>& OutMB,
-                                 std::vector<MemoryBufferRef>& Out) {
+                                 std::vector<MemoryBufferRef>& Out,
+                                 llvm::BumpPtrAllocator& BP) {
   ErrorOr<std::unique_ptr<MemoryBuffer>> BufOrErr
       = MemoryBuffer::getFile(ArchiveName, /*IsText=*/false);
   if (auto EC = BufOrErr.getError()) {
@@ -141,5 +155,5 @@ Error debase_tool::extractARFile(const Twine& ArchiveName,
   // Do the real stuff...
   MemoryBufferRef MB(**BufOrErr);
   OutMB = std::move(*BufOrErr);
-  return extractInMemoryARFile(MB, Out);
+  return extractInMemoryARFile(MB, Out, BP);
 }
