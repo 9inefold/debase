@@ -27,7 +27,7 @@ include(cmake/CPM.cmake)
 option(DEBASE_EXAMPLES "Build examples." OFF)
 option(DEBASE_TESTS "Run tests." OFF)
 option(DEBASE_RUNTIME_ONLY "Only add the debase runtime." OFF)
-option(DEBASE_GENERATE_TARGET_FUNCTION "Generate debase_sources(...)." OFF)
+option(DEBASE_GENERATE_TARGET_FUNCTION "Generate debase_library(...)." OFF)
 option(DEBASE_VERBOSE_LINKER "Run linker with '-v'." OFF)
 valued_option(DEBASE_VENDOR_NAME "Name used in --version." "Debaser")
 
@@ -69,7 +69,7 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
   endif()
   debase_set_binary(DEBASE_BINARY "${DEBASE_BINARY_DIR}/debase")
 
-  message(STATUS "Generating debase_sources() for \"${DEBASE_BINARY}\"")
+  message(STATUS "Generating debase_library() for \"${DEBASE_BINARY}\"")
   find_package(Python3 QUIET COMPONENTS Interpreter)
   if(NOT TARGET Python3::Interpreter)
     message(FATAL_ERROR "Python3 could not be found!")
@@ -77,27 +77,26 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
 
   set(DEBASE_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
   set(DEBASE_GENERATE_PY "${CMAKE_CURRENT_BINARY_DIR}/debase-generate.py")
-  configure_file(
-    debase-generate.py.in
-    ${DEBASE_GENERATE_PY}
-    @ONLY
-  )
+  configure_file(debase-generate.py.in ${DEBASE_GENERATE_PY} @ONLY)
 
   macro(print_var)
     message(STATUS "${ARGV}: ${${ARGV}}")
   endmacro(print_var)
 
   # Takes in source files to be debased, produces a target which can be linked to.
-  #  debase_sources(<target>
+  #  debase_library(<target>
   #                 [CONFIG <config>]
   #                 [OUTPUT <output-dir>]
   #                 [FILES <files>...]
   #                 [PASSTHROUGH <args>...])
-  function(debase_sources target)
-    cmake_parse_arguments(arg "" "CONFIG;OUTPUT" "FILES;PASSTHROUGH" ${ARGN})
+  function(debase_library target)
+    cmake_parse_arguments(arg
+      "" "CONFIG;OUTPUT" "FILES;PATTERNS;PASSTHROUGH" ${ARGN})
     set(DEBASE_target ${target}__sources)
+    #unset(arg_CONFIG)
 
-    if(NOT arg_CONFIG AND NOT arg_FILES)
+    #if(NOT arg_CONFIG AND NOT arg_FILES)
+    if(NOT arg_FILES)
       message(SEND_ERROR "No files provided for ${target}!")
       return()
     endif()
@@ -107,20 +106,26 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     elseif(NOT IS_ABSOLUTE "${arg_OUTPUT}")
       set(arg_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${arg_OUTPUT}")
     endif()
+    if(arg_CONFIG)
+      list(APPEND arg_PASSTHROUGH --config ${arg_CONFIG})
+    endif()
+    if(arg_PATTERNS)
+      list(APPEND arg_PASSTHROUGH --patterns ${arg_PATTERNS})
+    endif()
 
     if(CMAKE_MESSAGE_LOG_LEVEL MATCHES "VERBOSE|DEBUG|TRACE")
       list(APPEND arg_PASSTHROUGH "--verbose")
     endif()
-    if(CMAKE_BUILD_TYPE MATCHES "Debug|MinSizeRel")
+    if(CMAKE_BUILD_TYPE MATCHES "Release|MinSizeRel")
       list(APPEND arg_PASSTHROUGH "--strip-debug")
     endif()
 
-    message(STATUS "CONFIG: ${arg_CONFIG}")
+    #message(STATUS "CONFIG: ${arg_CONFIG}")
     message(STATUS "FILES: ${arg_FILES}")
     message(STATUS "OUTPUT: ${arg_OUTPUT}")
 
     if(NOT arg_FILES)
-      set(arg_FILES "${DEBASE_BASE_DIR}/Dummy.cpp")
+      set(arg_FILES "${DEBASE_BASE_DIR}/py/Dummy.cpp")
     endif()
 
     add_library(${DEBASE_target} STATIC ${arg_FILES})
@@ -132,30 +137,97 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     set_target_properties(${DEBASE_target} PROPERTIES
       ARCHIVE_OUTPUT_DIRECTORY ${arg_OUTPUT}
       LIBRARY_OUTPUT_DIRECTORY ${arg_OUTPUT}
-      #RUNTIME_OUTPUT_DIRECTORY "${arg_OUTPUT}"
       PREFIX "" SUFFIX ".ar"
     )
 
     # llvm-ar x ir/example-lib__sources.lib --output=lib
     # llc -O=3 --regalloc=pbqp -filetype=obj -o ./Class.o lib/Class.ll
 
-    #get_target_property(output_name ${DEBASE_target} OUTPUT_NAME)
-    #get_target_property(suffix ${DEBASE_target} SUFFIX)
-    #message(STATUS "OUTPUT_NAME: ${output_name}")
-    #message(STATUS "SUFFIX: ${suffix}")
+    if(DEBASE_MSVC_LIKE)
+      set(ar_suffix "lib")
+    else()
+      set(ar_suffix "a")
+    endif()
+    #set(ar_output "${arg_OUTPUT}/${target}__sources.${ar_suffix}")
+    set(ar_output "${arg_OUTPUT}/file.txt")
 
-    #print_var(CMAKE_CXX_FLAGS)
-    #print_var(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES)
-    #print_var(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES)
+    add_custom_command(
+      OUTPUT ${ar_output}
+      COMMAND Python3::Interpreter ${DEBASE_GENERATE_PY}
+        --build-type="${CMAKE_BUILD_TYPE}"
+        --output-dir="${arg_OUTPUT}"
+        --output-filename="${target}-out.json"
+        --target-name=$<TARGET_FILE_NAME:${DEBASE_target}>
+        "--passthrough=\"${arg_PASSTHROUGH}\""
+        $<TARGET_PROPERTY:${DEBASE_target},SOURCES>
+        # Args...
+      DEPENDS ${DEBASE_target} ${arg_FILES}
+      #COMMAND_EXPAND_LISTS
+      COMMENT "Generating ${target} IR")
+    
+    add_custom_target(${target}__target DEPENDS ${ar_output})
+    add_library(${target} STATIC py/Dummy.cpp)
+    add_dependencies(${target} ${target}__target)
+  endfunction(debase_library)
+
+  #target_link_directories()
+  #target_link_libraries()
+
+  # Forwards to target_include_directories
+  function(debase_include_directories target)
+    target_include_directories(${target}__sources ${ARGN})
+  endfunction(debase_include_directories)
+
+  # Forwards to target_compile_definitions
+  function(debase_compile_definitions target)
+    target_compile_definitions(${target}__sources ${ARGN})
+  endfunction(debase_compile_definitions)
+
+  # Forwards to target_compile_features
+  function(debase_compile_features target)
+    target_compile_features(${target}__sources ${ARGN})
+  endfunction(debase_compile_features)
+
+  # Forwards to target_compile_options
+  function(debase_compile_options target)
+    target_compile_options(${target}__sources ${ARGN})
+  endfunction(debase_compile_options)
+
+  # Forwards to target_sources
+  function(debase_sources target)
+    target_sources(${target}__sources ${ARGN})
   endfunction(debase_sources)
+
+  # Forwards to target_link_libraries
+  function(debase_link_libraries target)
+    target_link_libraries(${target}__sources ${ARGN})
+    target_link_libraries(${target} ${ARGN})
+  endfunction(debase_link_libraries)
+
+  # Forwards to target_link_directories
+  function(debase_link_directories target)
+    target_link_directories(${target}__sources ${ARGN})
+    target_link_directories(${target} ${ARGN})
+  endfunction(debase_link_directories)
 endif()
 
 ################# DONT INCLUDE THE REST OF THIS ################################
 
-debase_sources(example-lib
-  CONFIG examples/Filename/Config.json
+debase_library(example-lib
+  #CONFIG
+  #  examples/Filename/Config.json
   FILES
     XYZ.hidden.cpp
-    examples/Filename/Class.cpp
-  OUTPUT ir
+    #examples/Filename/Class.cpp
+  PATTERNS
+    "**::/{file.stem}*/"
+  OUTPUT ir2
+  PASSTHROUGH
+    --allow-no-builtins
+    --permissive
 )
+
+debase_sources(example-lib PUBLIC examples/Filename/Class.cpp)
+
+add_executable(example-driver DummyDriver.cpp)
+target_link_libraries(example-driver example-lib)
