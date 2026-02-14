@@ -75,7 +75,7 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     add_custom_target(debase_pseudodriver DEPENDS ${PROJECT_NAME})
   endif()
 
-  message(STATUS "Generating debase_library() for \"${DEBASE_BINARY}\"")
+  message(STATUS "Generating debase_library() with \"${DEBASE_BINARY}\"")
   find_package(Python3 QUIET COMPONENTS Interpreter)
   if(NOT TARGET Python3::Interpreter)
     message(FATAL_ERROR "Python3 could not be found!")
@@ -94,22 +94,15 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
   #                 [CONFIG <config>]
   #                 [OUTPUT <output-dir>]
   #                 [FILES <file>...]
+  #                 [IRFILES <file>...]
   #                 [PATTERNS <pattern>...]
   #                 [DUMP]
   #                 [PASSTHROUGH args...])
   function(debase_library target)
     cmake_parse_arguments(arg
-      "DUMP" "CONFIG;OUTPUT" "FILES;PATTERNS;PASSTHROUGH" ${ARGN})
+      "DUMP" "CONFIG;OUTPUT" "FILES;IRFILES;PATTERNS;PASSTHROUGH" ${ARGN})
     set(DEBASE_target ${target}__sources)
-    #unset(arg_CONFIG)
 
-    if(arg_DUMP)
-      set(arg_DUMP "-D")
-    else()
-      set(arg_DUMP "")
-    endif()
-
-    #if(NOT arg_CONFIG AND NOT arg_FILES)
     if(NOT arg_FILES)
       message(SEND_ERROR "No files provided for ${target}!")
       return()
@@ -123,8 +116,17 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     if(arg_CONFIG)
       list(APPEND arg_PASSTHROUGH --config ${arg_CONFIG})
     endif()
+    if(arg_IRFILES)
+      list(APPEND arg_PASSTHROUGH ${arg_IRFILES})
+    endif()
     if(arg_PATTERNS)
       list(APPEND arg_PASSTHROUGH --patterns ${arg_PATTERNS})
+    endif()
+
+    if(arg_DUMP)
+      set(arg_DUMP "-D")
+    else()
+      set(arg_DUMP "")
     endif()
 
     if(CMAKE_MESSAGE_LOG_LEVEL MATCHES "VERBOSE|DEBUG|TRACE")
@@ -176,9 +178,6 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
         --output-filename="${target}-out.json"
         "--passthrough=\"${arg_PASSTHROUGH}\""
         #$<TARGET_PROPERTY:${DEBASE_target},SOURCES>
-      #DEPENDS
-      #  debase_pseudodriver
-      #  ${DEBASE_target} ${arg_FILES}
       BYPRODUCTS ${rsp_output}
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       COMMENT "Generating ${target} IR")
@@ -188,33 +187,7 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
       PROPERTIES GENERATED 1
     )
 
-    #add_custom_command(
-    #  TARGET ${target}__target PRE_BUILD
-    #  COMMAND llvm-objdump ${ar_output}
-    #)
-
-    #add_custom_command(
-    #  OUTPUT ${ar_output}
-    #  COMMAND Python3::Interpreter ${DEBASE_GENERATE_PY}
-    #    --target-name=$<TARGET_FILE_NAME:${DEBASE_target}>
-    #    --archive-name="${ar_output}"
-    #    --build-type="${CMAKE_BUILD_TYPE}"
-    #    --output-dir="${arg_OUTPUT}"
-    #    --output-filename="${target}-out.json"
-    #    "--passthrough=\"${arg_PASSTHROUGH}\""
-    #    $<TARGET_PROPERTY:${DEBASE_target},SOURCES>
-    #    # Args...
-    #  DEPENDS
-    #    debase_pseudodriver
-    #    ${DEBASE_target} ${arg_FILES}
-    #  BYPRODUCTS ${ar_output}
-    #  #COMMAND_EXPAND_LISTS
-    #  COMMENT "Generating ${target} IR")
-    
-    #add_custom_target(${target}__target DEPENDS ${ar_output})
     add_library(${target} STATIC py/Dummy.cpp)
-    
-    #target_link_libraries(${target} PRIVATE ${ar_output})
     target_link_options(${target} PUBLIC "@${rsp_output}")
     add_dependencies(${target} ${target}__target)
   endfunction(debase_library)
@@ -264,25 +237,25 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
   endfunction(debase_sources)
 endif()
 
-################# DONT INCLUDE THE REST OF THIS ################################
+################# EXAMPLE  #####################################################
 
-debase_library(example-lib
-  #CONFIG
-  #  examples/Filename/Config.json
-  FILES
-    examples/Filename/Class.cpp
-  PATTERNS
-    "**::/{file.stem}*/"
-  OUTPUT ir
-  DUMP
-  PASSTHROUGH
-    #--allow-no-builtins
-    #--output-assembly
-    #--verbose
-)
-
-#debase_sources(example-lib PUBLIC examples/Filename/Class.cpp)
-debase_include_directories(example-lib PUBLIC examples/Filename)
-
-add_executable(example-driver examples/Filename/Driver.cpp)
-target_link_libraries(example-driver PUBLIC example-lib)
+#debase_library(example-lib
+#  #CONFIG
+#  #  examples/Filename/Config.json
+#  FILES
+#    examples/Filename/Class.cpp
+#  PATTERNS
+#    "**::/{file.stem}*/"
+#  OUTPUT ir
+#  DUMP
+#  PASSTHROUGH
+#    #--allow-no-builtins
+#    #--output-assembly
+#    #--verbose
+#)
+#
+##debase_sources(example-lib PUBLIC examples/Filename/Class.cpp)
+#debase_include_directories(example-lib PUBLIC examples/Filename)
+#
+#add_executable(example-driver examples/Filename/Driver.cpp)
+#target_link_libraries(example-driver PUBLIC example-lib)
