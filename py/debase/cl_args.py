@@ -9,6 +9,12 @@ def parse_args():
   )
 
   parser.add_argument(
+    '-D', '--dump',
+    dest='dump',
+    action='store_const',
+    default=False, const=True
+  )
+  parser.add_argument(
     '--build-type',
     dest='build_type',
     type=str,
@@ -33,6 +39,12 @@ def parse_args():
     dest='archive',
     type=str, default='',
     help='the output archive file'
+  )
+  parser.add_argument(
+    '--rsp', '--rsp-name',
+    dest='response',
+    type=str, default='',
+    help='the output response file'
   )
   parser.add_argument(
     '-o', '--output-dir',

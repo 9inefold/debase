@@ -156,8 +156,13 @@ DumpModule("dump-module", cl::Hidden,
 
 static cl::opt<bool>
 AllowNoBI("allow-no-builtins", cl::Hidden,
-          cl::desc("Ignore files which have no builtins"),
+          cl::desc("Ignore warnings on files which have no builtins"),
           cl::init(false), cl::cat(DebaseToolCategory));
+
+static cl::opt<bool>
+EmitAll("emit-all", cl::Hidden,
+        cl::desc("Emit all modules"),
+        cl::init(false), cl::cat(DebaseToolCategory));
 
 static std::optional<std::string> ArchiveOnly;
 static std::optional<std::string> OutputSuccessfulFilenames;
@@ -453,9 +458,10 @@ class DeBaser {
   SmallPtrSet<Function*, 4> BISet;
 
   bool LoadedModule : 1 = false;
-  bool SetUnlinks : 1 = false;
-  bool LastCheck : 1 = true;
-  bool DidCleanup : 1 = false;
+  bool SetUnlinks   : 1 = false;
+  bool SetBuiltins  : 1 = false;
+  bool LastCheck    : 1 = true;
+  bool DidCleanup   : 1 = false;
 
 public:
   /// A utility for creating new debaser objects.
@@ -510,11 +516,25 @@ public:
       DeBaser::ResetInfo(F, PrevInfo);
   }
 
+  /// Removes __debase builtins
+  void removeBI__debase() {
+    //RemoveAllReferencesTo(BI__debase_mark_begin);
+    //RemoveAllReferencesTo(BI__debase_mark_end);
+    //RemoveAllReferencesTo(BI__debase_continuation);
+    MakeBIRemovable(BI__debase_mark_begin);
+    MakeBIRemovable(BI__debase_mark_end);
+    MakeBIRemovable(BI__debase_continuation);
+  }
+
   ErrorOr<std::string> writeLLVM(const Twine& Dir);
 
   Triple getTriple() const {
     assert(M && "Module was not initialized!");
     return Triple(M->getTargetTriple());
+  }
+
+  size_t getBICount() const {
+    return SetBuiltins ? BISet.size() : 0;
   }
 
   raw_ostream& error() const {
@@ -526,6 +546,10 @@ private:
   static PrevFunctionInfo GetInfoAndUpdate(Function* F, const SymbolFeatures& FFeats);
   /// Resets a `Function` using `PrevFunctionInfo`.
   static void ResetInfo(Function* F, const PrevFunctionInfo& Info);
+  /// Makes builtin always_inline
+  static void MakeBIRemovable(Function* F);
+  /// Removes all uses of a function in module.
+  static void RemoveAllReferencesTo(Function* F);
 
   /// Common between both `loadModule` implementations.
   bool loadModuleCommon(StringRef Filename);
@@ -606,6 +630,7 @@ bool DeBaser::loadRefsAndBuiltins() {
   BI__debase_mark_begin   = LoadFunction("__debase_mark_begin");
   BI__debase_mark_end     = LoadFunction("__debase_mark_end");
   BI__debase_continuation = LoadFunction("__debase_continuation");
+  this->SetBuiltins = true;
   // Load clang builtins
   BI__clang_call_terminate = M->getFunction("__clang_call_terminate");
   // Check builtins loaded
@@ -620,9 +645,12 @@ void DeBaser::runPasses(const std::vector<FunctionPass*>& Passes, StringRef Pass
   
   for (auto [F, _] : LocatedRefs) {
     bool DidModify = false;
-    for (FunctionPass* P : Passes)
+    vbss() << "For " << llvm::demangle(F->getName()) << '\n';
+    for (FunctionPass* P : Passes) {
+      vbss() << "  Running " << P->getPassName() << '\n';
       if (P->runOnFunction(*F))
         DidModify = true;
+    }
     // ...
     if (DidModify && Verbose) {
       WithColor::note(outs(), PassName)
@@ -850,7 +878,6 @@ bool DeBaser::loadModuleCommon(StringRef Filename) {
   return true;
 }
 
-/// Loads a `Module` from the specified buffer into `DeBaser::M`.
 bool DeBaser::loadModule(MemoryBufferRef IRFile, LLVMContext& Context) {
   if (LLVM_UNLIKELY(LoadedModule)) {
     error() << "Module has already been loaded as '"
@@ -866,7 +893,7 @@ bool DeBaser::loadModule(MemoryBufferRef IRFile, LLVMContext& Context) {
     return false;
   }
 
-  return loadModuleCommon(IRFile.getBufferIdentifier());
+  return loadModuleCommon(M->getSourceFileName());
 }
 
 bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
@@ -886,7 +913,7 @@ bool DeBaser::loadModule(StringRef Filename, LLVMContext& Context) {
     return false;
   }
 
-  return loadModuleCommon(Filename);
+  return loadModuleCommon(M->getSourceFileName());
 }
 
 DeBaser::PrevFunctionInfo DeBaser::GetInfoAndUpdate(Function* F, const SymbolFeatures& FFeats) {
@@ -911,6 +938,21 @@ void DeBaser::ResetInfo(Function* F, const PrevFunctionInfo& Info) {
     F->removeFnAttr(NoInline);
   if (Info.HadAlwaysinline)
     F->addFnAttr(AlwaysInline);
+}
+
+void DeBaser::MakeBIRemovable(Function* F) {
+  using enum Attribute::AttrKind;
+  if (!F)
+    return;
+  F->addFnAttr(AlwaysInline);
+  F->removeFnAttr(NoInline);
+}
+
+void DeBaser::RemoveAllReferencesTo(Function* F) {
+  if (!F)
+    return;
+  F->replaceAllUsesWith(UndefValue::get(F->getType()));
+  F->removeFromParent();
 }
 
 bool DeBaser::loadAndUpdateRefsFromModule() {
@@ -1114,21 +1156,24 @@ int main(int Argc, char** Argv) {
 
   if (ArchiveOnly) {
     vbss() << "Only running archiver!\n";
+    WithColor::warning(errs())
+      << "--archive-only currently doesn't generate symbol tables!\n"
+         "In the future I may add lib.exe type functionality, but for now just "
+         "link bitcode files directly.\n";
     SmallString<80> ArchivePath(OutputFilepath.getValue());
     sys::path::append(ArchivePath, *ArchiveOnly);
-    // Create FD
     StringRef ArName = ArchivePath.str();
-    errs() << "Generated archive: '" << ArName << "'!\n";
-    //ErrorOr<int> FDOrErr = CreateToolOutputFile(ArName, false);
-    //if (auto EC = FDOrErr.getError()) {
-    //  WithColor::error(errs())
-    //    << "Failed to create archive: "
-    //    << EC.message() << "\n";
-    //  return 1;
-    //}
-    //raw_fd_ostream OS(*FDOrErr, true);
-    //if (Error E = createARFile(OS, ArName, ValidFilenames)) {
-    if (Error E = createARFile(ArName, ValidFilenames)) {
+    // Create FD
+    ErrorOr<int> FDOrErr = CreateToolOutputFile(ArName, false);
+    if (auto EC = FDOrErr.getError()) {
+      WithColor::error(errs())
+        << "Failed to create archive: "
+        << EC.message() << "\n";
+      return 1;
+    }
+    raw_fd_ostream OS(*FDOrErr, true);
+    if (Error E = createARFile(OS, ArName, ValidFilenames)) {
+    //if (Error E = createARFile(ArName, ValidFilenames)) {
       WithColor::error(errs())
         << "Failed to create archive: "
         << toString(std::move(E)) << "\n";
@@ -1266,15 +1311,28 @@ int main(int Argc, char** Argv) {
     JSONRecord->os() << OutLS << '\"' << Path << '\"';
   };
 
-  // CheckStuff();
-  auto O1OptPasses = GetO1PassesRequiredForSimplification();
   DeBaser::Factory DBFactory(*SM, Argv[0]);
-
   ItaniumClassifier IClass;
   MSVCClassifier MClass;
 
   /// Handles the actual debasing implementation based on local variables.
   auto HandleDebasing = [&] (DeBaser* DB, StringRef Filename) {
+    auto WriteDB = [&, DB, Filename] () {
+      if (!NoOutput) {
+        auto OFOrErr = DB->writeLLVM(OutputFilepath.getValue());
+        if (!OFOrErr.getError())
+          JSONRecordFilename(*OFOrErr);
+        else
+          WithColor::warning(errs()) << "Unable to write file.\n";
+      } else
+        JSONRecordFilename(Filename);
+      
+      if (Verbose) {
+        outs().flush();
+        errs() << '\n';
+      }
+    };
+
     //LLVMContext LocalCtx;
     vbss() << "File: " << Filename << '\n';
     if (DB == nullptr) {
@@ -1299,29 +1357,23 @@ int main(int Argc, char** Argv) {
       DB->setNameDemangler(&MClass);
 
     if (!DB->loadRefsAndBuiltins()) {
-      if (!AllowNoBI)
+      if (!AllowNoBI || DB->getBICount() != 0)
         errs() << "Unable to load builtins for '" << Filename << "'\n";
+      if (EmitAll) {
+        DB->removeBI__debase();
+        WriteDB();
+      }
       return;
     }
 
-    DB->runPasses(O1OptPasses);
+    // Crashes for no fucking reason
+    //DB->runPasses(GetO1PassesRequiredForSimplification());
     DB->debaseFunctions();
     DB->resetFunctionAttrs();
+    DB->removeBI__debase();
     // TODO: Run aggressive optimizer?
     // Write module
-    if (!NoOutput) {
-      auto OFOrErr = DB->writeLLVM(OutputFilepath.getValue());
-      if (!OFOrErr.getError())
-        JSONRecordFilename(*OFOrErr);
-      else
-        WithColor::warning(errs()) << "Unable to write file.\n";
-    } else
-      JSONRecordFilename(Filename);
-
-    if (Verbose) {
-      outs().flush();
-      errs() << '\n';
-    }
+    WriteDB();
   };
 
   // Handle loading llvmir/bitcode files and dispatching archives. 

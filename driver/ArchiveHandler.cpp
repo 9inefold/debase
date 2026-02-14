@@ -177,9 +177,9 @@ static Expected<NewArchiveMember> getArchiveMember(StringRef FileName) {
   return NMOrErr;
 }
 
-static Error performWriteOperation(StringRef ArchiveName,
-                                   const UniqueStringVector& Files,
-                                   std::unique_ptr<MemoryBuffer> OldArchiveBuf) {
+static Error performWriteOperation(raw_fd_ostream* OS,
+                                   StringRef ArchiveName,
+                                   const UniqueStringVector& Files) {
   std::vector<NewArchiveMember> NewMembers;
   for (auto& FileName : Files) {
     Expected<NewArchiveMember> NMOrErr = getArchiveMember(FileName);
@@ -191,17 +191,21 @@ static Error performWriteOperation(StringRef ArchiveName,
   object::Archive::Kind Kind
       = !NewMembers.empty() ? NewMembers.front().detectKindFromObject()
                             : object::Archive::getDefaultKind();
-  return llvm::writeArchive(ArchiveName, NewMembers, SymTab, Kind,
-                            Deterministic, Thin, std::move(OldArchiveBuf));
+  if (!OS)
+    return llvm::writeArchive(ArchiveName, NewMembers, SymTab, Kind,
+                              Deterministic, Thin);
+  // Write to fd
+  return llvm::writeArchiveToStream(*OS, NewMembers, SymTab, Kind,
+                                    Deterministic, Thin);
 }
 
 Error debase_tool::createARFile(raw_fd_ostream& OS,
                                 StringRef ArchiveName,
                                 const UniqueStringVector& Files) {
-  report_fatal_error("createARFile is unimplemented!");
+  return performWriteOperation(&OS, ArchiveName, Files);
 }
 
 Error debase_tool::createARFile(StringRef ArchiveName,
                                 const UniqueStringVector& Files) {
-  return performWriteOperation(ArchiveName, Files, /*OldArchiveBuf=*/nullptr);
+  return performWriteOperation(nullptr, ArchiveName, Files);
 }

@@ -93,13 +93,21 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
   #  debase_library(<target>
   #                 [CONFIG <config>]
   #                 [OUTPUT <output-dir>]
-  #                 [FILES <files>...]
-  #                 [PASSTHROUGH <args>...])
+  #                 [FILES <file>...]
+  #                 [PATTERNS <pattern>...]
+  #                 [DUMP]
+  #                 [PASSTHROUGH args...])
   function(debase_library target)
     cmake_parse_arguments(arg
-      "" "CONFIG;OUTPUT" "FILES;PATTERNS;PASSTHROUGH" ${ARGN})
+      "DUMP" "CONFIG;OUTPUT" "FILES;PATTERNS;PASSTHROUGH" ${ARGN})
     set(DEBASE_target ${target}__sources)
     #unset(arg_CONFIG)
+
+    if(arg_DUMP)
+      set(arg_DUMP "-D")
+    else()
+      set(arg_DUMP "")
+    endif()
 
     #if(NOT arg_CONFIG AND NOT arg_FILES)
     if(NOT arg_FILES)
@@ -146,34 +154,36 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     # llc -O=3 --regalloc=pbqp -filetype=obj -o ./Class.o lib/Class.ll
 
     if(DEBASE_MSVC_LIKE)
-      set(ar_suffix "lib")
+      set(ar_name "${target}-out.lib")
     else()
-      set(ar_suffix "a")
+      set(ar_name "${target}-out.a")
     endif()
-    set(ar_name "${target}-out.${ar_suffix}")
     set(ar_output "${arg_OUTPUT}/${ar_name}")
-    #set(ar_output "${arg_OUTPUT}/file.txt")
+
+    set(rsp_name "${target}-out.rsp")
+    set(rsp_output "${arg_OUTPUT}/${rsp_name}")
 
     add_custom_target(${target}__target DEPENDS ${DEBASE_target})
     add_custom_command(
       TARGET ${target}__target PRE_BUILD
       COMMAND Python3::Interpreter ${DEBASE_GENERATE_PY}
+        ${arg_DUMP}
         --target-name=$<TARGET_FILE_NAME:${DEBASE_target}>
         --archive-name="${ar_name}"
+        --rsp-name="${rsp_output}"
         --build-type="${CMAKE_BUILD_TYPE}"
         --output-dir="${arg_OUTPUT}"
         --output-filename="${target}-out.json"
         "--passthrough=\"${arg_PASSTHROUGH}\""
-        $<TARGET_PROPERTY:${DEBASE_target},SOURCES>
-        # Args...
+        #$<TARGET_PROPERTY:${DEBASE_target},SOURCES>
       #DEPENDS
       #  debase_pseudodriver
       #  ${DEBASE_target} ${arg_FILES}
-      BYPRODUCTS ${ar_output}
-      #COMMAND_EXPAND_LISTS
+      BYPRODUCTS ${rsp_output}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       COMMENT "Generating ${target} IR")
     
-    set_source_files_properties(${ar_output}
+    set_source_files_properties(${rsp_output}
       TARGET_DIRECTORY ${target}__target
       PROPERTIES GENERATED 1
     )
@@ -205,7 +215,7 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     add_library(${target} STATIC py/Dummy.cpp)
     
     #target_link_libraries(${target} PRIVATE ${ar_output})
-    target_link_options(${target} PUBLIC "-Wl,${ar_output}")
+    target_link_options(${target} PUBLIC "@${rsp_output}")
     add_dependencies(${target} ${target}__target)
   endfunction(debase_library)
 
@@ -260,16 +270,18 @@ debase_library(example-lib
   #CONFIG
   #  examples/Filename/Config.json
   FILES
-    XYZ.hidden.cpp
-    #examples/Filename/Class.cpp
+    examples/Filename/Class.cpp
   PATTERNS
     "**::/{file.stem}*/"
-  OUTPUT ir2
+  OUTPUT ir
+  DUMP
   PASSTHROUGH
-    --allow-no-builtins
-    --permissive
+    #--allow-no-builtins
+    #--output-assembly
+    #--verbose
 )
-debase_sources(example-lib PUBLIC examples/Filename/Class.cpp)
+
+#debase_sources(example-lib PUBLIC examples/Filename/Class.cpp)
 debase_include_directories(example-lib PUBLIC examples/Filename)
 
 add_executable(example-driver examples/Filename/Driver.cpp)
