@@ -81,7 +81,7 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     message(FATAL_ERROR "Python3 could not be found!")
   endif()
 
-  set(DEBASE_DUMMY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/py/Dummy.cpp")
+  set(DEBASE_DUMMY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/py/Dummy.cpp" CACHE FILEPATH "")
   set(DEBASE_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
   set(DEBASE_GENERATE_PY "${CMAKE_CURRENT_BINARY_DIR}/debase-generate.py")
   configure_file(debase-generate.py.in ${DEBASE_GENERATE_PY} @ONLY)
