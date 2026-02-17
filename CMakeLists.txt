@@ -81,10 +81,16 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     message(FATAL_ERROR "Python3 could not be found!")
   endif()
 
-  set(DEBASE_DUMMY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/py/Dummy.cpp" CACHE FILEPATH "")
+  set(DEBASE_PY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/py" CACHE FILEPATH "")
+  set(DEBASE_DUMMY_FILE "${DEBASE_PY_DIR}/Dummy.cpp" CACHE FILEPATH "")
   set(DEBASE_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
   set(DEBASE_GENERATE_PY "${CMAKE_CURRENT_BINARY_DIR}/debase-generate.py")
   configure_file(debase-generate.py.in ${DEBASE_GENERATE_PY} @ONLY)
+
+  # This is used to force codegen so we can use the library directly.
+  # Without a sink, any custom_commands won't run.
+  add_executable(__debase_sink ${DEBASE_DUMMY_FILE})
+  target_compile_definitions(__debase_sink PRIVATE -DDEBASE_DUMMY_MAIN=1)
 
   macro(print_var)
     message(STATUS "${ARGV}: ${${ARGV}}")
@@ -101,8 +107,10 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
   #                 [PASSTHROUGH args...])
   function(debase_library target)
     cmake_parse_arguments(arg
-      "DUMP" "CONFIG;OUTPUT" "FILES;IRFILES;PATTERNS;PASSTHROUGH" ${ARGN})
-    set(DEBASE_target ${target}__sources)
+      "DUMP" "CONFIG;OUTPUT;TIMEOUT"
+      "FILES;IRFILES;PATTERNS;PASSTHROUGH" ${ARGN})
+    #set(DEBASE_target ${target}__sources)
+    set(DEBASE_target ${target})
 
     if(NOT arg_FILES)
       message(SEND_ERROR "No files provided for ${target}!")
@@ -113,6 +121,7 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
       set(arg_OUTPUT ${CMAKE_CURRENT_BINARY_DIR})
     elseif(NOT IS_ABSOLUTE "${arg_OUTPUT}")
       set(arg_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${arg_OUTPUT}")
+      file(MAKE_DIRECTORY "${arg_OUTPUT}")
     endif()
     if(arg_CONFIG)
       list(APPEND arg_PASSTHROUGH --config ${arg_CONFIG})
@@ -122,6 +131,10 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     endif()
     if(arg_PATTERNS)
       list(APPEND arg_PASSTHROUGH --patterns ${arg_PATTERNS})
+    endif()
+
+    if(arg_TIMEOUT)
+      set(cmd_TIMEOUT "--timeout=${arg_TIMEOUT}")
     endif()
 
     if(arg_DUMP)
@@ -141,13 +154,13 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
       set(arg_FILES py/Dummy.cpp)
     endif()
 
-    add_library(${DEBASE_target} STATIC ${arg_FILES})
-    target_compile_options(${DEBASE_target} PRIVATE
+    add_library(${target} STATIC ${arg_FILES})
+    target_compile_options(${target} PRIVATE
       -S -emit-llvm -Xclang -disable-llvm-passes
     )
     # -fms-compatibility-version=19
-    target_link_libraries(${DEBASE_target} PRIVATE debase::runtime)
-    set_target_properties(${DEBASE_target} PROPERTIES
+    target_link_libraries(${target} PRIVATE debase::runtime)
+    set_target_properties(${target} PROPERTIES
       ARCHIVE_OUTPUT_DIRECTORY ${arg_OUTPUT}
       LIBRARY_OUTPUT_DIRECTORY ${arg_OUTPUT}
       PREFIX "" SUFFIX ".ar"
@@ -166,7 +179,7 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     set(rsp_name "${target}-out.rsp")
     set(rsp_output "${arg_OUTPUT}/${rsp_name}")
 
-    add_custom_target(${target}__target DEPENDS ${DEBASE_target})
+    add_custom_target(${target}__target DEPENDS ${target})
     add_custom_command(
       TARGET ${target}__target PRE_BUILD
       COMMAND Python3::Interpreter ${DEBASE_GENERATE_PY}
@@ -188,75 +201,61 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
       PROPERTIES GENERATED 1
     )
 
-    add_library(${target} STATIC ${DEBASE_DUMMY_FILE})
+    # Tie to the sink to get around circular dependencies.
+    add_dependencies(__debase_sink ${target}__target)
     target_link_options(${target} PUBLIC "@${rsp_output}")
-    add_dependencies(${target} ${target}__target)
   endfunction(debase_library)
 
-  #target_link_directories()
-  #target_link_libraries()
+  function(debase_depends lib debased_target)
+    add_dependencies(${lib} ${debased_target}__target)
+    target_link_libraries(${lib} PUBLIC ${debased_target})
+  endfunction(debase_depends)
 
   # Forwards to target_include_directories
   function(debase_include_directories target)
-    target_include_directories(${target}__sources ${ARGN})
+    #target_include_directories(${target}__sources ${ARGN})
     target_include_directories(${target} ${ARGN})
   endfunction(debase_include_directories)
 
   # Forwards to target_compile_definitions
   function(debase_compile_definitions target)
-    target_compile_definitions(${target}__sources ${ARGN})
+    #target_compile_definitions(${target}__sources ${ARGN})
     target_compile_definitions(${target} ${ARGN})
   endfunction(debase_compile_definitions)
 
   # Forwards to target_compile_features
   function(debase_compile_features target)
-    target_compile_features(${target}__sources ${ARGN})
+    #target_compile_features(${target}__sources ${ARGN})
     target_compile_features(${target} ${ARGN})
   endfunction(debase_compile_features)
 
   # Forwards to target_compile_options
   function(debase_compile_options target)
-    target_compile_options(${target}__sources ${ARGN})
+    #target_compile_options(${target}__sources ${ARGN})
     target_compile_options(${target} ${ARGN})
   endfunction(debase_compile_options)
 
   # Forwards to target_link_libraries
   function(debase_link_libraries target)
-    target_link_libraries(${target}__sources ${ARGN})
+    #target_link_libraries(${target}__sources ${ARGN})
     target_link_libraries(${target} ${ARGN})
   endfunction(debase_link_libraries)
 
   # Forwards to target_link_directories
   function(debase_link_directories target)
-    target_link_directories(${target}__sources ${ARGN})
+    #target_link_directories(${target}__sources ${ARGN})
     target_link_directories(${target} ${ARGN})
   endfunction(debase_link_directories)
 
   # Forwards to target_sources
   function(debase_sources target)
-    target_sources(${target}__sources ${ARGN})
+    #target_sources(${target}__sources ${ARGN})
+
+    target_sources(${target} ${ARGN})
   endfunction(debase_sources)
 endif()
 
-################# EXAMPLE  #####################################################
-
-#debase_library(example-lib
-#  #CONFIG
-#  #  examples/Filename/Config.json
-#  FILES
-#    examples/Filename/Class.cpp
-#  PATTERNS
-#    "**::/{file.stem}*/"
-#  OUTPUT ir
-#  DUMP
-#  PASSTHROUGH
-#    #--allow-no-builtins
-#    #--output-assembly
-#    #--verbose
-#)
-#
-##debase_sources(example-lib PUBLIC examples/Filename/Class.cpp)
-#debase_include_directories(example-lib PUBLIC examples/Filename)
-#
-#add_executable(example-driver examples/Filename/Driver.cpp)
-#target_link_libraries(example-driver PUBLIC example-lib)
+# Build example driver
+if (DEBASE_EXAMPLES)
+  include(Examples.cmake)
+endif()

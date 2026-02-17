@@ -40,8 +40,8 @@ def run_debaser(debase_bin, args):
     print(' '.join(debase_args))
   result = run_process(debase_args, str(o))
   if result.returncode != 0:
-    errs('failed to run debaser!')
     errs(result.stderr.strip())
+    errs('failed to run debaser!')
     sys.exit(result.returncode)
   
   return (o / 'lib' / args.jsonout)

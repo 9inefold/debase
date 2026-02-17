@@ -55,7 +55,7 @@ def parse_args():
   parser.add_argument(
     '--output-filename', '--output-filenames',
     dest='jsonout',
-    type=str,
+    type=str, default='out.json',
     help='arguments passed to debase'
   )
   parser.add_argument(
