@@ -207,8 +207,17 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
   endfunction(debase_library)
 
   function(debase_depends lib debased_target)
+    get_target_property(alias_target ${lib} ALIASED_TARGET)
+    if(alias_target)
+      set(lib ${alias_target})
+    endif()
     add_dependencies(${lib} ${debased_target}__target)
-    target_link_libraries(${lib} PUBLIC ${debased_target})
+    get_target_property(type ${lib} TYPE)
+    if (${type} STREQUAL "INTERFACE_LIBRARY")
+      target_link_libraries(${lib} INTERFACE ${debased_target})
+    else()
+      target_link_libraries(${lib} PUBLIC ${debased_target})
+    endif()
   endfunction(debase_depends)
 
   # Forwards to target_include_directories
