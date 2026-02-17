@@ -462,6 +462,7 @@ class DeBaser {
   bool SetBuiltins  : 1 = false;
   bool LastCheck    : 1 = true;
   bool DidCleanup   : 1 = false;
+  bool IsOk         : 1 = true;
 
 public:
   /// A utility for creating new debaser objects.
@@ -526,6 +527,18 @@ public:
     MakeBIRemovable(BI__debase_continuation);
   }
 
+  bool verify(StringRef Section = "") {
+    if (VerifyEach && verifyModule(*M, &errs())) {
+      if (!Section.empty())
+        error() << "'" << LLFile << "' failed during " << Section << ".\n";
+      else
+        error() << "'" << LLFile << "' failed.\n";
+      this->IsOk = false;
+      return false;
+    }
+    return true;
+  }
+
   ErrorOr<std::string> writeLLVM(const Twine& Dir);
 
   Triple getTriple() const {
@@ -539,6 +552,10 @@ public:
 
   raw_ostream& error() const {
     return WithColor::error(errs());
+  }
+
+  bool isOk() const {
+    return this->IsOk;
   }
 
 private:
@@ -656,6 +673,10 @@ void DeBaser::runPasses(const std::vector<FunctionPass*>& Passes, StringRef Pass
       WithColor::note(outs(), PassName)
         << F->getName() << " was modified.\n";
     }
+  }
+
+  if (VerifyEach && verifyModule(*M, &errs())) {
+    error() << PassName << " pass is broken!\n";
   }
 }
 
@@ -1054,8 +1075,10 @@ ErrorOr<std::string> DeBaser::writeLLVM(const Twine& Dir) {
     M->print(OS, nullptr);
   else {
     bool IsNewDbgInfoFormat = M->IsNewDbgInfoFormat;
-    if (IsNewDbgInfoFormat)
+    if (IsNewDbgInfoFormat) {
       M->convertFromNewDbgValues();
+      verify("DbgConversion");
+    }
     WriteBitcodeToFile(*M, OS);
     if (IsNewDbgInfoFormat)
       M->convertToNewDbgValues();
@@ -1319,6 +1342,14 @@ int main(int Argc, char** Argv) {
   /// Handles the actual debasing implementation based on local variables.
   auto HandleDebasing = [&] (DeBaser* DB, StringRef Filename) {
     auto WriteDB = [&, DB, Filename] () {
+      if (!DB->isOk()) {
+        WithColor::warning(errs())
+          << "Module '" << Filename << "' is corrupted.\n";
+        return;
+      } else if (Verbose) {
+        vbss() << "Module '" << Filename << "' verified.\n";
+      }
+
       if (!NoOutput) {
         auto OFOrErr = DB->writeLLVM(OutputFilepath.getValue());
         if (!OFOrErr.getError())
@@ -1362,6 +1393,7 @@ int main(int Argc, char** Argv) {
         errs() << "Unable to load builtins for '" << Filename << "'\n";
       if (EmitAll) {
         DB->removeBI__debase();
+        DB->verify("RemoveBIPartial");
         WriteDB();
       }
       return;
@@ -1369,9 +1401,14 @@ int main(int Argc, char** Argv) {
 
     // Crashes for no fucking reason
     //DB->runPasses(GetO1PassesRequiredForSimplification());
+    //DB->verify("O1Passes");
     DB->debaseFunctions();
+    DB->verify("Debasing");
+
     DB->resetFunctionAttrs();
     DB->removeBI__debase();
+    DB->verify("RemoveBI");
+
     // TODO: Run aggressive optimizer?
     // Write module
     WriteDB();
