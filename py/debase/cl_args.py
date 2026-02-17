@@ -77,4 +77,6 @@ def parse_args():
   for f in args.files:
     files.extend(f.split(';'))
   args.files = files
+
+  args.dump = True
   return args

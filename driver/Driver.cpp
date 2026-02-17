@@ -946,6 +946,7 @@ void DeBaser::MakeBIRemovable(Function* F) {
     return;
   F->addFnAttr(AlwaysInline);
   F->removeFnAttr(NoInline);
+  F->removeFnAttr(OptimizeNone);
 }
 
 void DeBaser::RemoveAllReferencesTo(Function* F) {

@@ -54,18 +54,20 @@ def run_llc(llc_bin, args, bc_files: list[str]):
     'Debug': ['-O=0', '--frame-pointer=none'],
     'RelWithDebInfo': ['-O=2', '--frame-pointer=non-leaf'],
     'MinSizeRel': ['-O=2', f'--frame-pointer={args.frame_pointer}'],
-    'Release': ['-O=3', f'--frame-pointer={args.frame_pointer}'],
+    'Release': ['-O=3', f'--frame-pointer={args.frame_pointer}', '--regalloc=pbqp'],
   }
 
   out_files = []
   failed = False
 
+  failures = 0
+  max_failures = min(len(bc_files) // 3, 5)
   for bc_file in bc_files:
     out = o / (Path(bc_file).stem + '.o')
     llc_args = [
       llc_bin,
       *llc_O[args.build_type],
-      '--regalloc=pbqp', '-filetype=obj',
+      '-filetype=obj',
       '-o', out.as_posix(),
       bc_file
     ]
@@ -78,6 +80,10 @@ def run_llc(llc_bin, args, bc_files: list[str]):
       errs('failed to run llc on', Path(bc_file).as_posix(), '!')
       errs(result.stderr.strip())
       failed = True
+      failures += 1
+    
+    if failures > max_failures:
+      break
   
   if failed:
     sys.exit(1)

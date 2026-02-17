@@ -81,12 +81,16 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     message(FATAL_ERROR "Python3 could not be found!")
   endif()
 
+  set(DEBASE_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}") # For configure_file
   set(DEBASE_PY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/py" CACHE FILEPATH "")
-  set(DEBASE_DUMMY_FILE "${DEBASE_PY_DIR}/Dummy.cpp" CACHE FILEPATH "")
-  set(DEBASE_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
   set(DEBASE_GENERATE_PY "${CMAKE_CURRENT_BINARY_DIR}/debase-generate.py")
   configure_file(debase-generate.py.in ${DEBASE_GENERATE_PY} @ONLY)
 
+  set_property(GLOBAL PROPERTY DEBASE_py_exe "${Python3_EXECUTABLE}")
+  set_property(GLOBAL PROPERTY DEBASE_py_dir "${DEBASE_PY_DIR}")
+  set_property(GLOBAL PROPERTY DEBASE_gen_py "${DEBASE_GENERATE_PY}")
+
+  set(DEBASE_DUMMY_FILE "${DEBASE_PY_DIR}/Dummy.cpp" CACHE FILEPATH "")
   # This is used to force codegen so we can use the library directly.
   # Without a sink, any custom_commands won't run.
   add_executable(__debase_sink ${DEBASE_DUMMY_FILE})
@@ -179,10 +183,13 @@ if(DEBASE_GENERATE_TARGET_FUNCTION)
     set(rsp_name "${target}-out.rsp")
     set(rsp_output "${arg_OUTPUT}/${rsp_name}")
 
+    get_property(Python3_EXECUTABLE GLOBAL PROPERTY DEBASE_py_exe)
+    get_property(DEBASE_GENERATE_PY GLOBAL PROPERTY DEBASE_gen_py)
+
     add_custom_target(${target}__target DEPENDS ${target})
     add_custom_command(
       TARGET ${target}__target PRE_BUILD
-      COMMAND Python3::Interpreter ${DEBASE_GENERATE_PY}
+      COMMAND ${Python3_EXECUTABLE} ${DEBASE_GENERATE_PY}
         ${arg_DUMP}
         --target-name=$<TARGET_FILE_NAME:${DEBASE_target}>
         --archive-name="${ar_name}"
