@@ -24,6 +24,7 @@
 #pragma once
 
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Error.h"
@@ -50,12 +51,16 @@ class SymbolMatcher final {
 public:
   /// The type used to store patterns.
   using PatternStorageTy = llvm::SmallPtrSet<Pattern*, 8>;
+  /// Type type used to store the trie.
+  using SymTrieTy = llvm::StringSet<>;
   
 private:
   /// Patterns used for matching constructors.
   PatternStorageTy CtorPatterns;
   /// Patterns used for matching destructors.
   PatternStorageTy DtorPatterns;
+  /// "trie" for faster name lookups for simple names.
+  std::optional<SymTrieTy> BaseTrie;
   /// Contains the Patterns which need to be destroyed.
   llvm::SmallPtrSet<Pattern*, 4> ToDestroy;
 

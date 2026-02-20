@@ -32,6 +32,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/WithColor.h"
+#include "Character.hpp"
 #include "FilePropertyCache.hpp"
 #include "PatternLex.hpp"
 #include "SymbolFeatures.hpp"
@@ -152,6 +153,8 @@ static bool MatchAgainst(const SymbolMatcher::PatternStorageTy& Patterns,
 bool SymbolMatcher::match(const SymbolFeatures& Features) const {
   if (!Features.isCtorDtor())
     return false;
+  if (BaseTrie && BaseTrie->contains(Features.baseName()))
+    return true;
   // Now check specifics.
   if (Features.isCtor())
     return MatchAgainst(CtorPatterns, Features.NestedNames);
@@ -452,6 +455,7 @@ public:
   Error load();
   Error loadFilePaths(json::Array& files);
   Error loadFilePath(StringRef filename);
+  Error loadBasetrie(json::Array& patterns);
   Error loadPatterns(json::Object& patterns);
   Error loadPatterns(json::Array& patterns);
   Error loadPattern(StringRef pattern);
@@ -481,31 +485,45 @@ Expected<JSONLoaderHandler> JSONLoaderHandler::New(StringRef Filename,
 }
 
 Error JSONLoaderHandler::load() {
-  if (json::Object* root = JSON.getAsObject()) {
-    // Check if we even care
-    if (this->OutFiles) {
-      // "files": [...]
-      if (json::Array* files = root->getArray("files")) {
-        if (Error E = this->loadFilePaths(*files))
-          return E;
-      } else if (auto file = root->getString("files")) {
-        if (Error E = this->loadFilePath(*file))
-          return E;
-      } else
-        return report("'files' does not exist or is not an array");
-    }
+  json::Object* root = JSON.getAsObject();
+  if (root == nullptr)
+    return report("root node is not an object");
+  
+  // Check if we even care
+  if (json::Value* _files = root->get("files"); _files && this->OutFiles) {
+    // "files": [...] or "..."
+    if (json::Array* files = _files->getAsArray()) {
+      if (Error E = this->loadFilePaths(*files))
+        return E;
+    } else if (auto file = _files->getAsString()) {
+      if (Error E = this->loadFilePath(*file))
+        return E;
+    } else
+      return report("\"files\" is not an array/string");
+  }
 
+  if (json::Value* _basetrie = root->get("basetrie")) {
+    // "basetrie": [...]
+    if (json::Array* basetrie = _basetrie->getAsArray()) {
+      if (Error E = this->loadBasetrie(*basetrie))
+        return E;
+    } else
+      return report("\"basetrie\" is not an array");
+  }
+
+  if (json::Value* _patterns = root->get("patterns")) {
     // "patterns": { ... } or [...] or "..."
-    if (json::Object* patterns = root->getObject("patterns"))
+    if (json::Object* patterns = _patterns->getAsObject())
       return this->loadPatterns(*patterns);
-    else if (json::Array* patterns = root->getArray("patterns"))
+    else if (json::Array* patterns = _patterns->getAsArray())
       return this->loadPatterns(*patterns);
-    else if (auto pattern = root->getString("patterns"))
+    else if (auto pattern = _patterns->getAsString())
       return this->loadPattern(*pattern);
     else
-      return report("'patterns' does not exist or is not an object/array/string");
+      return report("\"patterns\" is not an object/array/string");
   }
-  return report("root node is not an object");
+
+  return Error::success();
 }
 
 Error JSONLoaderHandler::loadFilePath(StringRef filename) {
@@ -627,6 +645,32 @@ Error JSONLoaderHandler::loadPattern(StringRef pattern) {
   if (LLVM_UNLIKELY(!Pat))
     return Pat.takeError();
   this->addAll(*Pat);
+  return Error::success();
+}
+
+Error JSONLoaderHandler::loadBasetrie(json::Array& patterns) {
+  auto& BaseTrie = [this] () -> SymbolMatcher::SymTrieTy& {
+    if (P->BaseTrie)
+      return *P->BaseTrie;
+    return P->BaseTrie.emplace();
+  } ();
+
+  for (auto& _pattern : patterns) {
+    auto pattern = _pattern.getAsString();
+    if (LLVM_UNLIKELY(!pattern)) {
+      if (P->Permissive)
+        continue;
+      return report("basetrie is not a string");
+    }
+    if (!Character::isIdentifier(*pattern)) {
+      if (P->Permissive)
+        continue;
+      return report("basetrie contains non-identifier: " + Twine(*pattern));
+    }
+    // Now actually load the pattern.
+    BaseTrie.insert(*pattern);
+  }
+
   return Error::success();
 }
 

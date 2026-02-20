@@ -1,0 +1,9 @@
+{
+  "basetrie": [
+    "A", "B", "C", "E"
+  ],
+  "files": [
+    "./Simple.ll",
+    "./SimpleMSVC.ll"
+  ]
+}
